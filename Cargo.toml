@@ -21,11 +21,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 assert2 = "0.3.15"
-criterion = "0.5.1"
-
-[[bench]]
-name = "general"
-harness = false
 
 [lints]
 workspace = true
