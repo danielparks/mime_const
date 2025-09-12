@@ -11,6 +11,30 @@
 use core::ops::Range;
 use konst::{option, try_};
 
+/// A single parameter in a MIME type, e.g. “charset=utf-8”.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Parameter {
+    start: usize,
+    equal: usize,
+    end: usize,
+    quoted: bool,
+}
+
+/// Parameters in a MIME type.
+///
+/// FIXME: We can’t use a `Vec` here because it might be dropped within a `const
+/// fn`, such as `MimeType::constant()`. See [E0493] for more information.
+///
+/// [E0493]: https://doc.rust-lang.org/error_codes/E0493.html
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Parameters {
+    None,
+    One(Parameter),
+    Two(Parameter, Parameter),
+    Three(Parameter, Parameter, Parameter),
+    // Many(Vec<Parameter>),
+}
+
 /// A MIME type (also called a media type).
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MimeType<'a> {
@@ -18,6 +42,7 @@ pub struct MimeType<'a> {
     type_: Range<usize>,
     subtype: Range<usize>,
     suffix: Option<Range<usize>>,
+    parameters: Parameters,
 }
 
 /// Check if a byte is valid in a token.
@@ -57,7 +82,7 @@ const fn find_non_whitespace_byte(input: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Eq, PartialEq)]
 pub enum ParseError {
     #[error("input is empty")]
     Empty,
@@ -75,8 +100,16 @@ pub enum ParseError {
     SuffixEmpty,
     #[error("invalid character in suffix (after '+')")]
     SuffixInvalidCharacter(usize),
+    #[error("parameter missing (after ';')")]
+    ParameterEmpty(usize),
     #[error("invalid character in parameter (after ';')")]
     ParameterInvalidCharacter(usize),
+    #[error("parameter missing '=' (after ';')")]
+    ParameterEqualMissing(usize),
+    #[error("parameter missing value (after '=')")]
+    ParameterValueEmpty(usize),
+    #[error("more than three parameters (internal limitation)")]
+    TooManyParameters,
     #[error("trailing whitespace")]
     TrailingWhitespace,
 }
@@ -142,6 +175,87 @@ const fn parse_suffix(
     }
 }
 
+/// Parse the _parameters_ out of `bytes` starting at `previous_end`.
+///
+/// > type/subtype+suffix ; parameter_key=value
+const fn parse_parameters(
+    bytes: &[u8],
+    previous_end: usize,
+) -> Result<Parameters> {
+    match parse_parameter(bytes, previous_end) {
+        Err(error) => Err(error),
+        Ok(None) => Ok(Parameters::None),
+        Ok(Some(one)) => match parse_parameter(bytes, one.end) {
+            Err(error) => Err(error),
+            Ok(None) => Ok(Parameters::One(one)),
+            Ok(Some(two)) => match parse_parameter(bytes, two.end) {
+                Err(error) => Err(error),
+                Ok(None) => Ok(Parameters::Two(one, two)),
+                Ok(Some(three)) => match parse_parameter(bytes, three.end) {
+                    Err(error) => Err(error),
+                    Ok(None) => Ok(Parameters::Three(one, two, three)),
+                    Ok(Some(_four)) => Err(ParseError::TooManyParameters),
+                },
+            },
+        },
+    }
+}
+
+/// Parse the _parameter_ out of `bytes` starting at `previous_end`.
+///
+/// > type/subtype+suffix ; parameter_key=value
+const fn parse_parameter(
+    bytes: &[u8],
+    previous_end: usize,
+) -> Result<Option<Parameter>> {
+    match find_non_whitespace_byte(bytes, previous_end) {
+        None if previous_end < bytes.len() => {
+            Err(ParseError::TrailingWhitespace)
+        }
+        None => Ok(None),
+        Some(i) if bytes[i] != b';' => {
+            Err(ParseError::ParameterInvalidCharacter(i))
+        }
+        Some(semicolon) => {
+            match find_non_whitespace_byte(bytes, semicolon + 1) {
+                None => Err(ParseError::ParameterEmpty(semicolon)),
+                Some(start) => parse_parameter_key_value(bytes, start),
+            }
+        }
+    }
+}
+
+/// Parse the _parameter_ out of `bytes` starting at `start`.
+///
+/// > type/subtype+suffix ; parameter_key=value
+const fn parse_parameter_key_value(
+    bytes: &[u8],
+    start: usize,
+) -> Result<Option<Parameter>> {
+    match find_non_token_byte(bytes, start) {
+        Some(equal) if start >= equal => Err(ParseError::ParameterEmpty(start)),
+        Some(equal) if bytes[equal] == b'=' => {
+            // FIXME support quotes
+            let end = match find_non_token_byte(bytes, equal + 1) {
+                Some(i) if matches!(bytes[i], b';' | b' ' | b'\t') => i,
+                Some(i) => {
+                    return Err(ParseError::ParameterInvalidCharacter(i))
+                }
+                None => bytes.len(),
+            };
+
+            if end <= equal + 1 {
+                // FIXME? is an empty value legal?
+                Err(ParseError::ParameterValueEmpty(end))
+            } else {
+                Ok(Some(Parameter { start, equal, end, quoted: false }))
+            }
+        }
+        Some(i) => Err(ParseError::ParameterInvalidCharacter(i)),
+        None => Err(ParseError::ParameterEqualMissing(start)),
+    }
+}
+
 impl<'a> MimeType<'a> {
     /// Create a `MimeType` in `const` context.
     ///
@@ -171,21 +285,10 @@ impl<'a> MimeType<'a> {
         let subtype = try_!(parse_subtype(bytes, type_.end + 1));
         let suffix = try_!(parse_suffix(bytes, subtype.end));
 
-        let essence_end = option::unwrap_or!(&suffix, &subtype).end + 1;
-        match find_non_whitespace_byte(bytes, essence_end) {
-            None if essence_end < bytes.len() => {
-                return Err(ParseError::TrailingWhitespace)
-            }
-            None => {}
-            // FIXME parameters not supported.
-            Some(parameters_start) => {
-                return Err(ParseError::ParameterInvalidCharacter(
-                    parameters_start,
-                ))
-            }
-        }
+        let essence_end = option::unwrap_or!(&suffix, &subtype).end;
+        let parameters = try_!(parse_parameters(bytes, essence_end));
 
-        Ok(Self { source, type_, subtype, suffix })
+        Ok(Self { source, type_, subtype, suffix, parameters })
     }
 
     pub fn tuple(&self) -> (&'a str, &'a str, Option<&'a str>) {
@@ -213,6 +316,38 @@ mod tests {
         assert_eq!(
             MimeType::constant("foo/bar+hey").tuple(),
             ("foo", "bar", Some("hey"))
+        );
+    }
+
+    #[test]
+    fn parse_one_parameter() {
+        assert_eq!(
+            MimeType::constant("foo/bar+hey ; a=b").tuple(),
+            ("foo", "bar", Some("hey"))
+        );
+    }
+
+    #[test]
+    fn parse_two_parameters() {
+        assert_eq!(
+            MimeType::constant("foo/bar+hey;a=b ; c=abc").tuple(),
+            ("foo", "bar", Some("hey"))
+        );
+    }
+
+    #[test]
+    fn parse_three_parameters() {
+        assert_eq!(
+            MimeType::constant("foo/bar+hey  ;a=b;  c=abc;key=value").tuple(),
+            ("foo", "bar", Some("hey"))
+        );
+    }
+
+    #[test]
+    fn parse_four_parameters() {
+        assert_eq!(
+            MimeType::try_constant("foo/bar+hey ;a=1;b=2;c=3;d=4"),
+            Err(ParseError::TooManyParameters),
         );
     }
 }
