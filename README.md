@@ -2,7 +2,7 @@
 
 [![docs.rs](https://img.shields.io/docsrs/mime_const)][docs.rs]
 [![Crates.io](https://img.shields.io/crates/v/mime_const)][crates.io]
-![Rust version 1.65+](https://img.shields.io/badge/Rust%20version-1.65%2B-success)
+![Rust version 1.57+](https://img.shields.io/badge/Rust%20version-1.57%2B-success)
 
 Generated from template https://github.com/danielparks/danielparks-template.rs
 with [cargo-generate](https://github.com/ashleygwilliams/cargo-generate).
