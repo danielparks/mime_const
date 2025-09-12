@@ -1,12 +1,14 @@
 //! # Minimum supported Rust version
 //!
-//! Currently the minimum supported Rust version (MSRV) is **1.57**. Future
+//! Currently the minimum supported Rust version (MSRV) is **1.46**. Future
 //! increases in the MSRV will require a major version bump.
 
 #![no_std]
 #![forbid(unsafe_code)]
 // Enable doc_cfg on docsrs so that we get feature markers.
 #![cfg_attr(docsrs, feature(doc_cfg))]
+
+extern crate konst;
 
 use core::ops::Range;
 use konst::{option, try_};
@@ -56,7 +58,7 @@ pub const fn is_valid_token_byte(b: u8) -> bool {
     matches!(b,
         b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | // b'+' |
         b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~' |
-        b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
+        b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z'
     )
 }
 
@@ -266,7 +268,12 @@ impl<'a> MimeType<'a> {
     pub const fn constant(source: &'a str) -> Self {
         match Self::try_constant(source) {
             Ok(mt) => mt,
-            Err(_) => panic!("Error parsing MimeType"),
+            Err(_) => {
+                #[allow(unconditional_panic, clippy::out_of_bounds_indexing)]
+                let _: usize = [/*Error parsing MimeType*/][0];
+                #[allow(clippy::empty_loop)]
+                loop {}
+            }
         }
     }
 

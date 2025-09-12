@@ -1,16 +1,23 @@
 # mime_const
 
-![Rust version 1.57+](https://img.shields.io/badge/Rust%20version-1.57%2B-success)
-
-This is an experiment in parsing MIME/media types in `const` context. Presently
-this requires a minimum Rust version of 1.57 so that we can `panic!()` in a
-`const fn`, but that could be moved back if we hid the function that panics on
-error behind a feature.
-
-Most of the time people will want a compile-time panic in code like:
+![Rust version 1.46+](https://img.shields.io/badge/Rust%20version-1.46%2B-success)
 
 ```rust
 const MARKDOWN: MimeType = MimeType::constant("text/markdown; charset=utf-8");
+```
+
+This is an experiment in parsing MIME/media types in `const` context. Presently
+this requires a minimum Rust version of 1.46 so we can use `if` and `match` in
+`const` context.
+
+### Panic kludge
+
+This uses a horrible kludge to trigger a compile-time panic, since `panic!()` in
+`const` requires Rust 1.46.
+
+```rust
+#[allow(unconditional_panic, clippy::out_of_bounds_indexing)]
+let _: usize = [/*Error parsing MimeType*/][0];
 ```
 
 ## License
