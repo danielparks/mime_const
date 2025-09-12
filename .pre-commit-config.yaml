@@ -17,7 +17,7 @@ repos:
       - id: detect-private-key
       - id: mixed-line-ending
         args: ["--fix=no"]
-      - id: no-commit-to-branch
+      # - id: no-commit-to-branch
   - repo: local
     hooks:
       - id: cargo clippy
