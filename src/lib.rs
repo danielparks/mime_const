@@ -11,14 +11,6 @@
 use core::ops::Range;
 use konst::{option, try_};
 
-/// A token used in a MIME type.
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Token<'a>(&'a str);
-
-/// Parameters for a MIME type.
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Parameters<'a>(&'a str); // FIXME
-
 /// A MIME type (also called a media type).
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MimeType<'a> {
@@ -26,25 +18,6 @@ pub struct MimeType<'a> {
     type_: Range<usize>,
     subtype: Range<usize>,
     suffix: Option<Range<usize>>,
-}
-
-impl<'a> Token<'a> {
-    /// Create a `Token` in `const` context.
-    ///
-    /// # Panics
-    ///
-    /// Will panic if a parse error is encountered.
-    #[must_use]
-    pub const fn constant(input: &'a str) -> Self {
-        let bytes = input.as_bytes();
-        assert!(!bytes.is_empty(), "Token must not be empty");
-        assert!(
-            find_non_token_byte(bytes, 0).is_none(),
-            "Found invalid character when parsing token",
-        );
-
-        Self(input)
-    }
 }
 
 /// Check if a byte is valid in a token.
@@ -60,18 +33,6 @@ pub const fn is_valid_token_byte(b: u8) -> bool {
         b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~' |
         b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
     )
-}
-
-impl<'a> Parameters<'a> {
-    /// Create a `Parameters` in `const` context.
-    ///
-    /// # Panics
-    ///
-    /// Will panic if a parse error is encountered.
-    #[must_use]
-    pub const fn constant(input: &'a str) -> Self {
-        Self(input)
-    }
 }
 
 const fn find_non_token_byte(input: &[u8], start: usize) -> Option<usize> {
@@ -241,31 +202,6 @@ impl<'a> MimeType<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn token_debug() {
-        assert_eq!(format!("{:?}", Token::constant("foo")), r#"Token("foo")"#);
-    }
-
-    #[test]
-    #[should_panic(expected = "Token must not be empty")]
-    fn token_empty() {
-        let _ = Token::constant("");
-    }
-
-    #[test]
-    #[should_panic(expected = "Found invalid character when parsing token")]
-    fn token_invalid_char() {
-        let _ = Token::constant("a b");
-    }
-
-    #[test]
-    fn parameters_debug() {
-        assert_eq!(
-            format!("{:?}", Parameters::constant("foo")),
-            r#"Parameters("foo")"#
-        );
-    }
 
     #[test]
     fn parse_type_subtype() {
