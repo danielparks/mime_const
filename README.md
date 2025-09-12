@@ -1,7 +1,7 @@
-# mime-test
+# mime_const
 
-[![docs.rs](https://img.shields.io/docsrs/mime-test)][docs.rs]
-[![Crates.io](https://img.shields.io/crates/v/mime-test)][crates.io]
+[![docs.rs](https://img.shields.io/docsrs/mime_const)][docs.rs]
+[![Crates.io](https://img.shields.io/crates/v/mime_const)][crates.io]
 ![Rust version 1.65+](https://img.shields.io/badge/Rust%20version-1.65%2B-success)
 
 Generated from template https://github.com/danielparks/danielparks-template.rs
@@ -25,6 +25,6 @@ Unless you explicitly state otherwise, any contribution you submit as defined
 in the Apache 2.0 license shall be dual licensed as above, without any
 additional terms or conditions.
 
-[docs.rs]: https://docs.rs/mime-test/latest/mime_test/
-[crates.io]: https://crates.io/crates/mime-test
-[issues]: https://github.com/danielparks/mime-test/issues
+[docs.rs]: https://docs.rs/mime_const/latest/mime_test/
+[crates.io]: https://crates.io/crates/mime_const
+[issues]: https://github.com/danielparks/mime_const/issues

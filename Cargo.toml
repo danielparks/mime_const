@@ -1,10 +1,10 @@
 [package]
-name = "mime-test"
+name = "mime_const"
 version = "0.1.0"
-authors = ["Daniel Parks <oss-mime-test@demonhorse.org>"]
+authors = ["Daniel Parks <oss-mime_const@demonhorse.org>"]
 description = ""
-homepage = "https://github.com/danielparks/mime-test"
-repository = "https://github.com/danielparks/mime-test"
+homepage = "https://github.com/danielparks/mime_const"
+repository = "https://github.com/danielparks/mime_const"
 readme = "README.md"
 exclude = [".*", "/release.sh"]
 keywords = []
