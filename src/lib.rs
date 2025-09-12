@@ -82,35 +82,35 @@ const fn find_non_whitespace_byte(input: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-#[derive(Debug, thiserror::Error, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ParseError {
-    #[error("input is empty")]
+    /// Input is empty
     Empty,
-    #[error("no '/'")]
-    NoSlash,
-    #[error("starts with '/' (no type)")]
+    /// Missing '/'.
+    SlashMissing,
+    /// Starts with '/' (no type)
     TypeEmpty,
-    #[error("invalid character in type (before '/')")]
+    /// Invalid character in type (before '/')
     TypeInvalidCharacter(usize),
-    #[error("no subtype (after '/')")]
+    /// No subtype (after '/')
     SubtypeEmpty,
-    #[error("invalid character in subtype (after '/')")]
+    /// Invalid character in subtype (after '/')
     SubtypeInvalidCharacter(usize),
-    #[error("no suffix (after '+')")]
+    /// No suffix (after '+')
     SuffixEmpty,
-    #[error("invalid character in suffix (after '+')")]
+    /// Invalid character in suffix (after '+')
     SuffixInvalidCharacter(usize),
-    #[error("parameter missing (after ';')")]
+    /// Parameter missing (after ';')
     ParameterEmpty(usize),
-    #[error("invalid character in parameter (after ';')")]
+    /// Invalid character in parameter (after ';')
     ParameterInvalidCharacter(usize),
-    #[error("parameter missing '=' (after ';')")]
+    /// Parameter missing '=' (after ';')
     ParameterEqualMissing(usize),
-    #[error("parameter missing value (after '=')")]
+    /// Parameter missing value (after '=')
     ParameterValueEmpty(usize),
-    #[error("more than three parameters (internal limitation)")]
+    /// More than three parameters (internal limitation)
     TooManyParameters,
-    #[error("trailing whitespace")]
+    /// Trailing whitespace
     TrailingWhitespace,
 }
 
@@ -130,7 +130,7 @@ const fn parse_type(bytes: &[u8], start: usize) -> Result<Range<usize>> {
                 Ok(Range { start, end })
             }
         }
-        None => Err(ParseError::NoSlash),
+        None => Err(ParseError::SlashMissing),
     }
 }
 
