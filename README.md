@@ -1,15 +1,17 @@
 # mime_const
 
-[![docs.rs](https://img.shields.io/docsrs/mime_const)][docs.rs]
-[![Crates.io](https://img.shields.io/crates/v/mime_const)][crates.io]
 ![Rust version 1.57+](https://img.shields.io/badge/Rust%20version-1.57%2B-success)
 
-Generated from template https://github.com/danielparks/danielparks-template.rs
-with [cargo-generate](https://github.com/ashleygwilliams/cargo-generate).
+This is an experiment in parsing MIME/media types in `const` context. Presently
+this requires a minimum Rust version of 1.57 so that we can `panic!()` in a
+`const fn`, but that could be moved back if we hid the function that panics on
+error behind a feature.
 
-## Development status
+Most of the time people will want a compile-time panic in code like:
 
-This is in active development. I am open to [suggestions][issues].
+```rust
+const MARKDOWN: MimeType = MimeType::constant("text/markdown; charset=utf-8");
+```
 
 ## License
 
