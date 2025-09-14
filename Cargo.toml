@@ -10,8 +10,8 @@ exclude = [".*", "/release.sh"]
 keywords = []
 categories = [] # https://crates.io/category_slugs
 license = "MIT OR Apache-2.0"
-rust-version = "1.46" # if/match in const context
-edition = "2015"
+rust-version = "1.57" # panic! in const context
+edition = "2021"
 
 [package.metadata.docs.rs]
 all-features = true

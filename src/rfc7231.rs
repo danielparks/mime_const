@@ -63,7 +63,6 @@
 //! [RFC6838]: https://datatracker.ietf.org/doc/html/rfc6838#section-4.2
 //! [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
 
-use crate::polyfill::*;
 use std::fmt;
 
 /// Parser for media types.
@@ -407,7 +406,7 @@ mod tests {
         };
     }
 
-    use rfc7231::ParseError::*;
+    use ParseError::*;
 
     // Tests against both media type and media range parsers.
     tests_both! {

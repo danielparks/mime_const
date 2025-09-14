@@ -7,11 +7,6 @@
 // Enable doc_cfg on docsrs so that we get feature markers.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-extern crate konst;
-
-#[macro_use]
-mod polyfill;
-
 pub mod rfc7231;
 
 use konst::{option, try_};
