@@ -65,6 +65,19 @@
 
 use std::fmt;
 
+/// Replacement for the `?` postfix operator.
+///
+/// `?` doesn’t work in `const` because it invokes
+/// [`std::convert::Into::into()`], which is not `const`.
+macro_rules! try_ {
+    ($value:expr) => {
+        match $value {
+            Ok(value) => value,
+            Err(error) => return Err(error),
+        }
+    };
+}
+
 /// Parser for media types.
 #[derive(Clone, Debug)]
 pub struct Parser {
@@ -98,24 +111,34 @@ impl Parser {
             return Err(ParseError::TooLong);
         }
 
+        let i = try_!(self.consume_type(bytes));
+        let slash = as_u16(i);
+        let (i, plus) = try_!(self.consume_subtype(bytes, i));
+
+        if i >= bytes.len() {
+            return Ok(Mime { source, slash, plus });
+        }
+
+        panic!("unimplemented");
+    }
+
+    /// Validate the type and return the index of the slash.
+    const fn consume_type(&self, bytes: &[u8]) -> Result<usize, ParseError> {
         // Validate first byte of type token.
         match bytes {
             [] => {
-                // FIXME empty
+                // FIXME? empty
                 return Err(ParseError::MissingSlash);
             }
-            [b'*', b'/', b'*'] if self.accept_media_range => {
-                return Ok(Mime { source, slash: 1u16, plus: None });
+            [b'*', b'/', ..] if self.accept_media_range => {
+                return Ok(1);
             }
-            [b'*', b'/', b'*', b';' | b' ' | b'\t', ..]
-                if self.accept_media_range =>
-            {
-                panic!("not implemented");
+            [b'/', ..] => {
+                return Err(ParseError::MissingType);
             }
             // FIXME what about starting with +?
             [c, ..] if is_token(*c) => (),
             [c, ..] => {
-                // FIXME if c == b'/', then error missing type?
                 return Err(ParseError::InvalidToken {
                     pos: 0,
                     byte: Byte(*c),
@@ -126,7 +149,6 @@ impl Parser {
         let mut i = 0;
 
         // Validate rest of type token and find '/'.
-        let slash;
         loop {
             i += 1;
             if i >= bytes.len() {
@@ -135,8 +157,7 @@ impl Parser {
 
             match bytes[i] {
                 b'/' => {
-                    slash = as_u16(i);
-                    break;
+                    return Ok(i);
                 }
                 c if is_token(c) => (),
                 c => {
@@ -147,9 +168,16 @@ impl Parser {
                 }
             };
         }
+    }
 
+    /// Validate the subtype and return the index after the last character.
+    const fn consume_subtype(
+        &self,
+        bytes: &[u8],
+        start: usize,
+    ) -> Result<(usize, Option<u16>), ParseError> {
         // Validate first byte of subtype token.
-        i += 1;
+        let mut i = start + 1;
         if i >= bytes.len() {
             return Err(ParseError::MissingSubtype);
         }
@@ -164,19 +192,21 @@ impl Parser {
                 return Err(ParseError::MissingSubtype);
             }
             b'*' if self.accept_media_range => {
-                // * subtype; peek at next byte to make sure it’s either the end
+                // * subtype; check next byte to make sure it’s either the end
                 // of the input or the end of the subtype.
-                if i + 1 >= bytes.len() {
-                    return Ok(Mime { source, slash, plus });
+                i += 1;
+                if i >= bytes.len() {
+                    return Ok((i, plus));
                 }
 
-                match bytes[i + 1] {
-                    b';' | b' ' | b'\t' => (),
+                match bytes[i] {
+                    b';' | b' ' | b'\t' => return Ok((i, plus)),
                     _ => {
+                        // subtype starts with *, which is invalid
                         return Err(ParseError::InvalidToken {
-                            pos: i,
+                            pos: i - 1,
                             byte: Byte(b'*'),
-                        })
+                        });
                     }
                 }
             }
@@ -190,7 +220,7 @@ impl Parser {
         loop {
             i += 1;
             if i >= bytes.len() {
-                return Ok(Mime { source, slash, plus });
+                return Ok((i, plus));
             }
             #[allow(clippy::redundant_pattern_matching)] // is_none() not const
             match bytes[i] {
@@ -198,7 +228,7 @@ impl Parser {
                     plus = Some(as_u16(i));
                 }
                 b';' | b' ' | b'\t' => {
-                    break;
+                    return Ok((i, plus));
                 }
                 c if is_token(c) => (),
                 c => {
@@ -209,8 +239,6 @@ impl Parser {
                 }
             };
         }
-
-        panic!("unimplemented");
     }
 }
 
@@ -241,6 +269,7 @@ impl<'a> Source<'a> {
 /// An error encountered while parsing a media type.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParseError {
+    MissingType,
     MissingSlash,
     MissingSubtype,
     MissingEqual,
@@ -255,6 +284,7 @@ impl std::error::Error for ParseError {}
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
+            ParseError::MissingType => "missing type before the slash (/)",
             ParseError::MissingSlash => "a slash (/) was missing between the type and subtype",
             ParseError::MissingSubtype => "missing subtype after the slash (/)",
             ParseError::MissingEqual => "an equals sign (=) was missing between a parameter and its value",
@@ -428,16 +458,12 @@ mod tests {
         }
         err_empty {  "" == Err(MissingSlash) }
         err_no_slash { "abc" == Err(MissingSlash) }
-        err_no_type {
-            "/abc" == Err(InvalidToken { pos: 0, byte: Byte(b'/') })
-        }
+        err_no_type { "/abc" == Err(MissingType) }
         err_bad_type {
             "a b/abc" == Err(InvalidToken { pos: 1, byte: Byte(b' ') })
         }
         err_no_subtype { "abc/" == Err(MissingSubtype) }
-        err_just_slash {
-            "/" == Err(InvalidToken { pos: 0, byte: Byte(b'/') })
-        }
+        err_just_slash {  "/" == Err(MissingType) }
         err_multiple_slash {
             "ab//c" == Err(InvalidToken { pos: 3, byte: Byte(b'/') })
         }
