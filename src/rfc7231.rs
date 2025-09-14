@@ -105,15 +105,13 @@ impl Parser {
                 // FIXME empty
                 return Err(ParseError::MissingSlash);
             }
-            [b'*', b'/', b'*', ..] if self.accept_media_range => {
-                if bytes[1] == b'/' {
-                    panic!("not implemented");
-                } else {
-                    return Err(ParseError::InvalidToken {
-                        pos: 0,
-                        byte: Byte(b'*'),
-                    });
-                }
+            [b'*', b'/', b'*'] if self.accept_media_range => {
+                return Ok(Mime { source, slash: 1u16, plus: None });
+            }
+            [b'*', b'/', b'*', b';' | b' ' | b'\t', ..]
+                if self.accept_media_range =>
+            {
+                panic!("not implemented");
             }
             // FIXME what about starting with +?
             [c, ..] if is_token(*c) => (),
@@ -337,10 +335,15 @@ const fn is_restricted_quoted_char(c: u8) -> bool {
 mod tests {
     use super::*;
 
+    /// Test a parsing with the passed parser.
     macro_rules! assert_parse {
-        ($input:expr, Ok(Mime { slash: $slash:expr, plus: $plus:expr, .. })) => {
+        (
+            $input:expr,
+            $parser:expr,
+            Ok(Mime { slash: $slash:expr, plus: $plus:expr, .. })
+        ) => {
             assert_eq!(
-                Parser::type_parser().parse_const($input),
+                $parser.parse_const($input),
                 Ok(Mime {
                     source: Source::Str($input),
                     slash: $slash,
@@ -348,17 +351,57 @@ mod tests {
                 })
             );
         };
-        ($input:expr, Err($error:expr)) => {
-            assert_eq!(Parser::type_parser().parse_const($input), Err($error));
+        ($input:expr, $parser:expr, Err($error:expr)) => {
+            assert_eq!($parser.parse_const($input), Err($error));
         };
     }
 
-    macro_rules! tests {
+    /// Test parsing a media type (rather than a range).
+    macro_rules! assert_type_parse {
+        ($input:expr, $($expected:tt)+) => {
+            assert_parse!($input, Parser::type_parser(), $($expected)+);
+        };
+    }
+
+    /// Test parsing a media range.
+    macro_rules! assert_range_parse {
+        ($input:expr, $($expected:tt)+) => {
+            assert_parse!($input, Parser::range_parser(), $($expected)+);
+        };
+    }
+
+    /// Test both media and type parsers
+    macro_rules! tests_both {
         ($($name:ident { $expected:literal == $($value:tt)+ })*) => {
             $(
                 #[test]
                 fn $name() {
-                    assert_parse!($expected, $($value)+);
+                    assert_type_parse!($expected, $($value)+);
+                    assert_range_parse!($expected, $($value)+);
+                }
+            )*
+        };
+    }
+
+    /// Test only the media type parser (not the media range parser)
+    macro_rules! tests_type {
+        ($($name:ident { $expected:literal == $($value:tt)+ })*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert_type_parse!($expected, $($value)+);
+                }
+            )*
+        };
+    }
+
+    /// Test only the media range parser
+    macro_rules! tests_range {
+        ($($name:ident { $expected:literal == $($value:tt)+ })*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert_range_parse!($expected, $($value)+);
                 }
             )*
         };
@@ -366,9 +409,8 @@ mod tests {
 
     use rfc7231::ParseError::*;
 
-    // FIXME test ranges
-
-    tests! {
+    // Tests against both media type and media range parsers.
+    tests_both! {
         ok_type_subtype { "foo/bar" == Ok(Mime { slash: 3, plus: None, .. }) }
         ok_type_subtype_suffix {
             "foo/bar+hey" == Ok(Mime { slash: 3, plus: Some(7), .. })
@@ -402,6 +444,29 @@ mod tests {
         }
         err_multiple_separate_slash {
             "ab/c/d" == Err(InvalidToken { pos: 4, byte: Byte(b'/') })
+        }
+        err_subtype_range_suffix {
+            "foo/*+a" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+        }
+    }
+
+    // Tests against only the media type parser.
+    tests_type! {
+        type_parse_err_everything_range {
+            "*/*" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+        }
+        type_parse_err_subtype_range {
+            "foo/*" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+        }
+    }
+
+    // Tests against only the media range parser.
+    tests_range! {
+        range_parse_ok_everything_range {
+            "*/*" == Ok(Mime { slash: 1, plus: None, .. })
+        }
+        range_parse_ok_subtype_range {
+            "foo/*" == Ok(Mime { slash: 3, plus: None, .. })
         }
     }
 }
