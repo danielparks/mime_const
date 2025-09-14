@@ -3,15 +3,19 @@
 //! Currently the minimum supported Rust version (MSRV) is **1.46**. Future
 //! increases in the MSRV will require a major version bump.
 
-#![no_std]
 #![forbid(unsafe_code)]
 // Enable doc_cfg on docsrs so that we get feature markers.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 extern crate konst;
 
-use core::ops::Range;
+#[macro_use]
+mod polyfill;
+
+pub mod rfc7231;
+
 use konst::{option, try_};
+use std::ops::Range;
 
 /// A single parameter in a MIME type, e.g. “charset=utf-8”.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -116,7 +120,7 @@ pub enum ParseError {
     TrailingWhitespace,
 }
 
-pub type Result<T, E = ParseError> = core::result::Result<T, E>;
+pub type Result<T, E = ParseError> = std::result::Result<T, E>;
 
 /// Parse the _type_ out of `bytes` starting at `start`.
 ///
