@@ -5,7 +5,7 @@
 //! so it is mostly copyright 2014-2019 Sean McArthur. See mime-LICENSE.
 //!
 //! There are multiple, contradictory specs defining the format of a media type.
-//! We follow [RFC7231 (HTTP)][RFC7231] because it is least restrictive:
+//! We follow [RFC7231 (HTTP)] because it is least restrictive:
 //!
 //! > ```ABNF
 //! > media-type = type "/" subtype *( OWS ";" OWS parameter )
@@ -56,12 +56,12 @@
 //!
 //! ¯\\\_(ツ)\_/¯
 //!
-//! Notably all RFC6838 media types are also HTTP media types.
+//! Notably all RFC6838 media types are also HTTP media types. FIXME: true?
 //!
 //! [RFC2045]: https://datatracker.ietf.org/doc/html/rfc2045#section-5.1
 //! [RFC4288]: https://datatracker.ietf.org/doc/html/rfc4288#section-4.2
 //! [RFC6838]: https://datatracker.ietf.org/doc/html/rfc6838#section-4.2
-//! [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
+//! [RFC7231 (HTTP)]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
 
 use std::fmt;
 
