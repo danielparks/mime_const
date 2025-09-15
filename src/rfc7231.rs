@@ -142,7 +142,7 @@ impl Parser {
                 return Err(ParseError::MissingType);
             }
             // FIXME what about starting with +?
-            [c, ..] if is_token(*c) => (),
+            [c, ..] if is_valid_token_byte(*c) => (),
             [c, ..] => {
                 return Err(ParseError::InvalidToken {
                     pos: 0,
@@ -192,7 +192,7 @@ impl Parser {
                     }
                 };
             }
-            Some(c) if is_token(c) => (),
+            Some(c) if is_valid_token_byte(c) => (),
             Some(c) => {
                 return Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
             }
@@ -207,7 +207,7 @@ impl Parser {
                 Some(b'+') if matches!(plus, None) => {
                     plus = Some(as_u16(i));
                 }
-                Some(c) if is_token(c) => (),
+                Some(c) if is_valid_token_byte(c) => (),
                 Some(c) => {
                     return Err(ParseError::InvalidToken {
                         pos: i,
@@ -487,28 +487,23 @@ const fn as_u16(i: usize) -> u16 {
     i as u16
 }
 
-macro_rules! byte_map {
-    ($($flag:expr,)*) => ([
-        $($flag != 0,)*
-    ])
-}
-
-const TOKEN_MAP: [bool; 256] = byte_map![
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1,
-    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0,
-];
-
-const fn is_token(c: u8) -> bool {
-    TOKEN_MAP[c as usize]
+/// Valid token characters are defined in [RFC7231 (HTTP)][RFC7231]:
+///
+/// > ```ABNF
+/// > tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+/// >    "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+/// > ```
+///
+/// We make an exception for `'*'`. FIXME?
+///
+/// [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
+#[inline]
+const fn is_valid_token_byte(c: u8) -> bool {
+    matches!(
+        c,
+        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'+' | b'-' | b'.' | b'^' |
+        b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
+    )
 }
 
 #[inline]
@@ -526,7 +521,7 @@ const fn find_non_token_byte(
 ) -> Option<(usize, u8)> {
     let mut i = start;
     while i < input.len() {
-        if !is_token(input[i]) {
+        if !is_valid_token_byte(input[i]) {
             return Some((i, input[i]));
         }
         i += 1;
