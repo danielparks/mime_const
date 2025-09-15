@@ -169,40 +169,31 @@ impl Parser {
     ) -> Result<(usize, Option<u16>)> {
         // Validate first byte of subtype token.
         let mut i = start + 1;
-        if i >= bytes.len() {
-            return Err(ParseError::MissingSubtype);
-        }
-
         let mut plus = None;
-        match bytes[i] {
-            b'+' => {
+        match get_byte(bytes, i) {
+            None | Some(b';' | b' ' | b'\t') => {
+                return Err(ParseError::MissingSubtype)
+            }
+            Some(b'+') => {
                 // FIXME? allow start with +?
                 plus = Some(as_u16(i));
             }
-            b';' | b' ' | b'\t' => {
-                return Err(ParseError::MissingSubtype);
-            }
-            b'*' if self.accept_media_range => {
+            Some(b'*') if self.accept_media_range => {
                 // * subtype; check next byte to make sure it’s either the end
                 // of the input or the end of the subtype.
-                i += 1;
-                if i >= bytes.len() {
-                    return Ok((i, plus));
-                }
-
-                match bytes[i] {
-                    b';' | b' ' | b'\t' => return Ok((i, plus)),
-                    _ => {
+                return match get_byte(bytes, i + 1) {
+                    None | Some(b';' | b' ' | b'\t') => Ok((i + 1, plus)),
+                    Some(_) => {
                         // subtype starts with *, which is invalid
-                        return Err(ParseError::InvalidToken {
-                            pos: i - 1,
+                        Err(ParseError::InvalidToken {
+                            pos: i,
                             byte: Byte(b'*'),
-                        });
+                        })
                     }
-                }
+                };
             }
-            c if is_token(c) => (),
-            c => {
+            Some(c) if is_token(c) => (),
+            Some(c) => {
                 return Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
             }
         }
@@ -210,25 +201,20 @@ impl Parser {
         // Validate rest of subtype token and find either space or ';'.
         loop {
             i += 1;
-            if i >= bytes.len() {
-                return Ok((i, plus));
-            }
             #[allow(clippy::redundant_pattern_matching)] // is_none() not const
-            match bytes[i] {
-                b'+' if matches!(plus, None) => {
+            match get_byte(bytes, i) {
+                None | Some(b';' | b' ' | b'\t') => return Ok((i, plus)),
+                Some(b'+') if matches!(plus, None) => {
                     plus = Some(as_u16(i));
                 }
-                b';' | b' ' | b'\t' => {
-                    return Ok((i, plus));
-                }
-                c if is_token(c) => (),
-                c => {
+                Some(c) if is_token(c) => (),
+                Some(c) => {
                     return Err(ParseError::InvalidToken {
                         pos: i,
                         byte: Byte(c),
                     })
                 }
-            };
+            }
         }
     }
 
@@ -523,6 +509,15 @@ const TOKEN_MAP: [bool; 256] = byte_map![
 
 const fn is_token(c: u8) -> bool {
     TOKEN_MAP[c as usize]
+}
+
+#[inline]
+const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
+    if i < input.len() {
+        Some(input[i])
+    } else {
+        None
+    }
 }
 
 const fn find_non_token_byte(
