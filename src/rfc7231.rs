@@ -225,22 +225,28 @@ impl Parser {
         bytes: &[u8],
         start: usize,
     ) -> Result<Parameters> {
-        match Self::parse_parameter(bytes, start) {
-            Err(error) => Err(error),
-            Ok(None) => Ok(Parameters::None),
-            Ok(Some(one)) => {
-                match Self::parse_parameter(bytes, one.end as usize) {
-                    Err(error) => Err(error),
-                    Ok(None) => Ok(Parameters::One(one)),
-                    Ok(Some(two)) => {
-                        match Self::parse_parameter(bytes, two.end as usize) {
-                            Err(error) => Err(error),
-                            Ok(None) => Ok(Parameters::Two(one, two)),
-                            // FIXME support >3 parameters
-                            Ok(Some(_three)) => panic!("unimplemented"),
-                        }
-                    }
-                }
+        let one = match try_!(Self::parse_parameter(bytes, start)) {
+            None => return Ok(Parameters::None),
+            Some(one) => one,
+        };
+
+        let two = match try_!(Self::parse_parameter(bytes, one.end as usize)) {
+            None => return Ok(Parameters::One(one)),
+            Some(two) => two,
+        };
+
+        let mut i = match try_!(Self::parse_parameter(bytes, two.end as usize))
+        {
+            None => return Ok(Parameters::Two(one, two)),
+            Some(Parameter { end, .. }) => end as usize,
+        };
+
+        // More than two parameters. Parse the remaining parameters to validate
+        // them, but drop the results because we can’t store them.
+        loop {
+            i = match try_!(Self::parse_parameter(bytes, i)) {
+                None => return Ok(Parameters::Many),
+                Some(Parameter { end, .. }) => end as usize,
             }
         }
     }
@@ -366,16 +372,18 @@ pub struct Parameter {
 
 /// Parameters in a MIME type.
 ///
-/// FIXME: We can’t use a `Vec` here because it might be dropped within a `const
-/// fn`, such as `MimeType::constant()`. See [E0493] for more information.
+/// This can only store the parse information for two parameters because an
+/// arbitrary number of parameters would require a `Vec` and we can’t fill a
+/// `Vec` in a `const fn`.
 ///
-/// [E0493]: https://doc.rust-lang.org/error_codes/E0493.html
+/// Instead, we validate the parameters and re-parse when need to access them.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Parameters {
     None,
     One(Parameter),
     Two(Parameter, Parameter),
-    // Many(Vec<Parameter>),
+    /// More than two.
+    Many,
 }
 
 /// An error encountered while parsing a media type.
@@ -716,6 +724,22 @@ mod tests {
                         quoted: false,
                     },
                 ),
+                ..
+            })
+        }
+        ok_three_parameters {
+            "a/b; k=v;key=value   ;3=3" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::Many,
+                ..
+            })
+        }
+        ok_four_parameters {
+            "a/b; k=v;key=value   ;3=3 ; 4=4" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::Many,
                 ..
             })
         }
