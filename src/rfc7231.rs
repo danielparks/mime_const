@@ -152,7 +152,7 @@ impl Parser {
         }
 
         // Validate rest of type token and find '/'.
-        match find_non_token_byte(bytes, 1) {
+        match consume_token(bytes, 1) {
             Some((i, b'/')) => Ok(i),
             Some((i, c)) => {
                 Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
@@ -259,11 +259,11 @@ impl Parser {
         bytes: &[u8],
         start: usize,
     ) -> Result<Option<Parameter>> {
-        match find_non_whitespace_byte(bytes, start) {
+        match consume_whitespace(bytes, start) {
             None if start < bytes.len() => Err(ParseError::TrailingWhitespace),
             None => Ok(None),
             Some((semicolon, b';')) => {
-                match find_non_whitespace_byte(bytes, semicolon + 1) {
+                match consume_whitespace(bytes, semicolon + 1) {
                     None => {
                         Err(ParseError::MissingParameter { pos: semicolon })
                     }
@@ -283,7 +283,7 @@ impl Parser {
         bytes: &[u8],
         start: usize,
     ) -> Result<Option<Parameter>> {
-        match find_non_token_byte(bytes, start) {
+        match consume_token(bytes, start) {
             Some((i, b';')) if i == start => {
                 Err(ParseError::MissingParameter { pos: i })
             }
@@ -291,7 +291,7 @@ impl Parser {
                 Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
             }
             Some((equal, b'=')) => {
-                let end = match find_non_token_byte(bytes, equal + 1) {
+                let end = match consume_token(bytes, equal + 1) {
                     Some((i, b'"')) if i == equal + 1 => {
                         // FIXME support quotes
                         panic!("unimplemented");
@@ -523,11 +523,7 @@ const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
     }
 }
 
-const fn find_non_token_byte(
-    input: &[u8],
-    start: usize,
-) -> Option<(usize, u8)> {
-    let mut i = start;
+const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     while i < input.len() {
         if !is_valid_token_byte(input[i]) {
             return Some((i, input[i]));
@@ -537,11 +533,8 @@ const fn find_non_token_byte(
     None
 }
 
-const fn find_non_whitespace_byte(
-    input: &[u8],
-    start: usize,
-) -> Option<(usize, u8)> {
-    let mut i = start;
+/// Consume horizontal whitespace (`[ \t]`).
+const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     while i < input.len() {
         if !matches!(input[i], b' ' | b'\t') {
             return Some((i, input[i]));
