@@ -407,24 +407,23 @@ impl std::error::Error for ParseError {}
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ParseError::*;
         match self {
-            ParseError::MissingType => {
-                f.write_str("missing type before the slash (/)")
-            }
-            ParseError::MissingSlash => f.write_str(
+            MissingType => f.write_str("missing type before the slash (/)"),
+            MissingSlash => f.write_str(
                 "a slash (/) was missing between the type and subtype",
             ),
-            ParseError::MissingSubtype => {
+            MissingSubtype => {
                 f.write_str("missing subtype after the slash (/)")
             }
-            ParseError::MissingParameter { pos } => {
+            MissingParameter { pos } => {
                 write!(
                     f,
                     "missing parameter after the semicolon (;) at position {}",
                     pos
                 )
             }
-            ParseError::MissingParameterEqual { pos } => {
+            MissingParameterEqual { pos } => {
                 write!(
                     f,
                     "an equals sign (=) was missing between a parameter and \
@@ -432,14 +431,14 @@ impl fmt::Display for ParseError {
                     pos
                 )
             }
-            ParseError::MissingParameterValue { pos } => {
+            MissingParameterValue { pos } => {
                 write!(
                     f,
                     "a value was missing in a parameter at position {}",
                     pos
                 )
             }
-            ParseError::MissingParameterQuote { pos } => {
+            MissingParameterQuote { pos } => {
                 write!(
                     f,
                     "a quote (\") was missing from a parameter value at \
@@ -447,17 +446,17 @@ impl fmt::Display for ParseError {
                     pos
                 )
             }
-            ParseError::InvalidToken { pos, byte } => {
+            InvalidToken { pos, byte } => {
                 write!(f, "invalid token, {:?} at position {}", byte, pos)
             }
-            ParseError::InvalidRange => f.write_str("unexpected asterisk"),
-            ParseError::InvalidParameter { pos, byte } => {
+            InvalidRange => f.write_str("unexpected asterisk"),
+            InvalidParameter { pos, byte } => {
                 write!(f, "invalid parameter, {:?} at position {}", byte, pos)
             }
-            ParseError::TrailingWhitespace => {
+            TrailingWhitespace => {
                 f.write_str("there is trailing whitespace at the end")
             }
-            ParseError::TooLong => f.write_str("the string is too long"),
+            TooLong => f.write_str("the string is too long"),
         }
     }
 }
