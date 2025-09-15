@@ -143,27 +143,13 @@ impl Parser {
             }
         }
 
-        let mut i = 0;
-
         // Validate rest of type token and find '/'.
-        loop {
-            i += 1;
-            if i >= bytes.len() {
-                return Err(ParseError::MissingSlash);
+        match find_non_token_byte(bytes, 1) {
+            Some((i, b'/')) => Ok(i),
+            Some((i, c)) => {
+                Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
             }
-
-            match bytes[i] {
-                b'/' => {
-                    return Ok(i);
-                }
-                c if is_token(c) => (),
-                c => {
-                    return Err(ParseError::InvalidToken {
-                        pos: i,
-                        byte: Byte(c),
-                    })
-                }
-            };
+            None => Err(ParseError::MissingSlash),
         }
     }
 
@@ -353,6 +339,20 @@ const TOKEN_MAP: [bool; 256] = byte_map![
 
 const fn is_token(c: u8) -> bool {
     TOKEN_MAP[c as usize]
+}
+
+const fn find_non_token_byte(
+    input: &[u8],
+    start: usize,
+) -> Option<(usize, u8)> {
+    let mut i = start;
+    while i < input.len() {
+        if !is_token(input[i]) {
+            return Some((i, input[i]));
+        }
+        i += 1;
+    }
+    None
 }
 
 #[allow(dead_code)]
