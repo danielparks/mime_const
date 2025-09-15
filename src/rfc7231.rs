@@ -100,10 +100,7 @@ impl Parser {
     }
 
     /// Actually do the parsing.
-    pub const fn parse_const<'a>(
-        &self,
-        src: &'a str,
-    ) -> Result<Mime<'a>, ParseError> {
+    pub const fn parse_const<'a>(&self, src: &'a str) -> Result<Mime<'a>> {
         let source = Source::Str(src);
         let bytes = src.as_bytes();
 
@@ -123,7 +120,7 @@ impl Parser {
     }
 
     /// Validate the type and return the index of the slash.
-    const fn consume_type(&self, bytes: &[u8]) -> Result<usize, ParseError> {
+    const fn consume_type(&self, bytes: &[u8]) -> Result<usize> {
         // Validate first byte of type token.
         match bytes {
             [] => {
@@ -175,7 +172,7 @@ impl Parser {
         &self,
         bytes: &[u8],
         start: usize,
-    ) -> Result<(usize, Option<u16>), ParseError> {
+    ) -> Result<(usize, Option<u16>)> {
         // Validate first byte of subtype token.
         let mut i = start + 1;
         if i >= bytes.len() {
@@ -300,6 +297,9 @@ impl fmt::Display for ParseError {
         }
     }
 }
+
+/// A `Result` with a [`ParseError`] error type.
+pub type Result<T, E = ParseError> = std::result::Result<T, E>;
 
 /// Wrapper for `u8` to make displaying bytes as characters easy.
 ///
