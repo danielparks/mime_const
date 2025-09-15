@@ -84,6 +84,8 @@ pub struct Parser {
     pub accept_media_range: bool,
 }
 
+// FIXME how do we deal with case?
+
 impl Parser {
     /// Create a `Parser` that can parse media ranges, e.g. `text/*`.
     #[inline]
@@ -113,10 +115,16 @@ impl Parser {
         let (i, plus) = try_!(self.consume_subtype(bytes, i));
 
         if i >= bytes.len() {
-            return Ok(Mime { source, slash, plus });
+            return Ok(Mime {
+                source,
+                slash,
+                plus,
+                parameters: Parameters::None,
+            });
         }
 
-        panic!("unimplemented");
+        let parameters = try_!(Self::parse_parameters(bytes, i));
+        Ok(Mime { source, slash, plus, parameters })
     }
 
     /// Validate the type and return the index of the slash.
@@ -223,6 +231,107 @@ impl Parser {
             };
         }
     }
+
+    /// Parse parameters from `bytes` starting at `start`.
+    ///
+    /// Parameters look like `; key=value; key2=value2`.
+    const fn parse_parameters(
+        bytes: &[u8],
+        start: usize,
+    ) -> Result<Parameters> {
+        match Self::parse_parameter(bytes, start) {
+            Err(error) => Err(error),
+            Ok(None) => Ok(Parameters::None),
+            Ok(Some(one)) => {
+                match Self::parse_parameter(bytes, one.end as usize) {
+                    Err(error) => Err(error),
+                    Ok(None) => Ok(Parameters::One(one)),
+                    Ok(Some(two)) => {
+                        match Self::parse_parameter(bytes, two.end as usize) {
+                            Err(error) => Err(error),
+                            Ok(None) => Ok(Parameters::Two(one, two)),
+                            // FIXME support >3 parameters
+                            Ok(Some(_three)) => panic!("unimplemented"),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Parse a parameter out of `bytes` starting at `start`.
+    ///
+    /// First this consumes the separator (`[ \t]*;[ \t]`), then it passes off
+    /// the actual key=value parsing to [`Self::parse_parameter_key_value()`].
+    const fn parse_parameter(
+        bytes: &[u8],
+        start: usize,
+    ) -> Result<Option<Parameter>> {
+        match find_non_whitespace_byte(bytes, start) {
+            None if start < bytes.len() => Err(ParseError::TrailingWhitespace),
+            None => Ok(None),
+            Some((semicolon, b';')) => {
+                match find_non_whitespace_byte(bytes, semicolon + 1) {
+                    None => {
+                        Err(ParseError::MissingParameter { pos: semicolon })
+                    }
+                    Some((start, _)) => {
+                        Self::parse_parameter_key_value(bytes, start)
+                    }
+                }
+            }
+            Some((i, c)) => {
+                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+            }
+        }
+    }
+
+    /// Parse a parameter key=value out of `bytes` starting at `start`.
+    const fn parse_parameter_key_value(
+        bytes: &[u8],
+        start: usize,
+    ) -> Result<Option<Parameter>> {
+        match find_non_token_byte(bytes, start) {
+            Some((i, b';')) if i == start => {
+                Err(ParseError::MissingParameter { pos: i })
+            }
+            Some((i, c)) if i == start => {
+                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+            }
+            Some((equal, b'=')) => {
+                let end = match find_non_token_byte(bytes, equal + 1) {
+                    Some((i, b'"')) if i == equal + 1 => {
+                        // FIXME support quotes
+                        panic!("unimplemented");
+                    }
+                    Some((i, b';' | b' ' | b'\t')) => i,
+                    Some((i, c)) => {
+                        return Err(ParseError::InvalidParameter {
+                            pos: i,
+                            byte: Byte(c),
+                        })
+                    }
+                    None => bytes.len(),
+                };
+
+                if end <= equal + 1 {
+                    // FIXME? is an empty value legal?
+                    Err(ParseError::MissingParameterValue { pos: end })
+                } else {
+                    Ok(Some(Parameter {
+                        start: as_u16(start),
+                        equal: as_u16(equal),
+                        end: as_u16(end),
+                        quoted: false,
+                    }))
+                }
+            }
+            Some((i, c)) => {
+                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+            }
+            None => Err(ParseError::MissingParameterEqual { pos: start }),
+        }
+    }
 }
 
 // FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
@@ -231,6 +340,7 @@ pub struct Mime<'a> {
     source: Source<'a>,
     slash: u16,
     plus: Option<u16>,
+    parameters: Parameters,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -249,16 +359,53 @@ impl<'a> Source<'a> {
     }
 }
 
+/// A single parameter in a MIME type, e.g. “charset=utf-8”.
+///
+/// This only contains indices, so it’s useless without the [`Mime`] struct and
+/// its [`Source`];
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Parameter {
+    /// The index of the start of the parameter name.
+    start: u16,
+
+    /// The index of the `'='`. The start of the value is `equal + 1`.
+    equal: u16,
+
+    /// The index just past the last character in the value.
+    end: u16,
+
+    /// Whether or not the value is a quoted string.
+    quoted: bool,
+}
+
+/// Parameters in a MIME type.
+///
+/// FIXME: We can’t use a `Vec` here because it might be dropped within a `const
+/// fn`, such as `MimeType::constant()`. See [E0493] for more information.
+///
+/// [E0493]: https://doc.rust-lang.org/error_codes/E0493.html
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Parameters {
+    None,
+    One(Parameter),
+    Two(Parameter, Parameter),
+    // Many(Vec<Parameter>),
+}
+
 /// An error encountered while parsing a media type.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParseError {
     MissingType,
     MissingSlash,
     MissingSubtype,
-    MissingEqual,
-    MissingQuote,
+    MissingParameter { pos: usize },
+    MissingParameterEqual { pos: usize },
+    MissingParameterValue { pos: usize }, // FIXME? correct?
+    MissingParameterQuote { pos: usize },
     InvalidToken { pos: usize, byte: Byte },
     InvalidRange,
+    InvalidParameter { pos: usize, byte: Byte },
+    TrailingWhitespace,
     TooLong,
 }
 
@@ -266,20 +413,57 @@ impl std::error::Error for ParseError {}
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let description = match self {
-            ParseError::MissingType => "missing type before the slash (/)",
-            ParseError::MissingSlash => "a slash (/) was missing between the type and subtype",
-            ParseError::MissingSubtype => "missing subtype after the slash (/)",
-            ParseError::MissingEqual => "an equals sign (=) was missing between a parameter and its value",
-            ParseError::MissingQuote => "a quote (\") was missing from a parameter value",
-            ParseError::InvalidToken { .. } => "invalid token",
-            ParseError::InvalidRange => "unexpected asterisk",
-            ParseError::TooLong => "the string is too long",
-        };
-        if let ParseError::InvalidToken { pos, byte } = *self {
-            write!(f, "{}, {:?} at position {}", description, byte, pos)
-        } else {
-            f.write_str(description)
+        match self {
+            ParseError::MissingType => {
+                f.write_str("missing type before the slash (/)")
+            }
+            ParseError::MissingSlash => f.write_str(
+                "a slash (/) was missing between the type and subtype",
+            ),
+            ParseError::MissingSubtype => {
+                f.write_str("missing subtype after the slash (/)")
+            }
+            ParseError::MissingParameter { pos } => {
+                write!(
+                    f,
+                    "missing parameter after the semicolon (;) at position {}",
+                    pos
+                )
+            }
+            ParseError::MissingParameterEqual { pos } => {
+                write!(
+                    f,
+                    "an equals sign (=) was missing between a parameter and \
+                    its value at position {}",
+                    pos
+                )
+            }
+            ParseError::MissingParameterValue { pos } => {
+                write!(
+                    f,
+                    "a value was missing in a parameter at position {}",
+                    pos
+                )
+            }
+            ParseError::MissingParameterQuote { pos } => {
+                write!(
+                    f,
+                    "a quote (\") was missing from a parameter value at \
+                    position {}",
+                    pos
+                )
+            }
+            ParseError::InvalidToken { pos, byte } => {
+                write!(f, "invalid token, {:?} at position {}", byte, pos)
+            }
+            ParseError::InvalidRange => f.write_str("unexpected asterisk"),
+            ParseError::InvalidParameter { pos, byte } => {
+                write!(f, "invalid parameter, {:?} at position {}", byte, pos)
+            }
+            ParseError::TrailingWhitespace => {
+                f.write_str("there is trailing whitespace at the end")
+            }
+            ParseError::TooLong => f.write_str("the string is too long"),
         }
     }
 }
@@ -355,6 +539,20 @@ const fn find_non_token_byte(
     None
 }
 
+const fn find_non_whitespace_byte(
+    input: &[u8],
+    start: usize,
+) -> Option<(usize, u8)> {
+    let mut i = start;
+    while i < input.len() {
+        if !matches!(input[i], b' ' | b'\t') {
+            return Some((i, input[i]));
+        }
+        i += 1;
+    }
+    None
+}
+
 #[allow(dead_code)]
 const fn is_restricted_quoted_char(c: u8) -> bool {
     c == 9 || (c > 31 && c != 127)
@@ -376,7 +574,28 @@ mod tests {
                 Ok(Mime {
                     source: Source::Str($input),
                     slash: $slash,
-                    plus: $plus
+                    plus: $plus,
+                    parameters: Parameters::None,
+                })
+            );
+        };
+        (
+            $input:expr,
+            $parser:expr,
+            Ok(Mime {
+                slash: $slash:expr,
+                plus: $plus:expr,
+                parameters: $parameters:expr,
+                ..
+            })
+        ) => {
+            assert_eq!(
+                $parser.parse_const($input),
+                Ok(Mime {
+                    source: Source::Str($input),
+                    slash: $slash,
+                    plus: $plus,
+                    parameters: $parameters,
                 })
             );
         };
@@ -472,6 +691,71 @@ mod tests {
         }
         err_subtype_range_suffix {
             "foo/*+a" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+        }
+        err_trailing_spaces {
+            "a/b   \t" == Err(TrailingWhitespace)
+        }
+        ok_one_parameter {
+            "a/b; k=v" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 8,
+                    quoted: false,
+                }),
+                ..
+            })
+        }
+        ok_two_parameters {
+            "a/b; k=v;key=value" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::Two(
+                    Parameter {
+                        start: 5,
+                        equal: 6,
+                        end: 8,
+                        quoted: false,
+                    },
+                    Parameter {
+                        start: 9,
+                        equal: 12,
+                        end: 18,
+                        quoted: false,
+                    },
+                ),
+                ..
+            })
+        }
+        ok_one_parameter_many_spaces {
+            "a/b   ;    k=v" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 11,
+                    equal: 12,
+                    end: 14,
+                    quoted: false,
+                }),
+                ..
+            })
+        }
+        err_space_in_parameter_key {
+            "a/b; k =v" == Err(InvalidParameter { pos: 6, byte: Byte(b' ') })
+        }
+        err_space_after_parameter {
+            "a/b; k=v " == Err(TrailingWhitespace)
+        }
+        err_missing_parameter_key {
+            "a/b; =v" == Err(InvalidParameter { pos: 5, byte: Byte(b'=') })
+        }
+        err_parameter_double_equal {
+            "a/b; k==v" == Err(InvalidParameter { pos: 7, byte: Byte(b'=') })
+        }
+        err_missing_parameter {
+            "a/b;; k=v" == Err(MissingParameter { pos: 4 })
         }
     }
 
