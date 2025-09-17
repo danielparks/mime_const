@@ -297,11 +297,7 @@ impl Parser {
             Some((equal, b'=')) => {
                 let end = match consume_token(bytes, equal + 1) {
                     Some((i, b'"')) if i == equal + 1 => {
-                        let end = match try_!(consume_quoted_string(bytes, i)) {
-                            Some((end, _)) => end,
-                            None => bytes.len(),
-                        };
-
+                        let end = try_!(parse_quoted_string(bytes, i));
                         return Ok(Some(Parameter {
                             start: as_u16(start),
                             equal: as_u16(equal),
@@ -558,12 +554,11 @@ const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     None
 }
 
-/// # Consume `quoted-string`.
+/// # Parse `quoted-string`.
 ///
 /// `input[i]` must by `b'"'`.
 ///
-/// Returns the `Ok(Some((index, byte)))` for the byte following the quoted
-/// string, or `Ok(None)` if it’s the end of the string.
+/// Returns the index + 1 of the last byte in the quoted string (always `b'"'`).
 ///
 /// [RFC7230 (HTTP) §3.2.6] defines `quoted-string`:
 ///
@@ -587,15 +582,16 @@ const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
 /// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
 /// > ```
 ///
+/// # Panics
+///
+/// If `input.get(i) != Some(b'"')`.
+///
 /// # Errors
 ///
 /// Returns variants of [`ParseError`] for errors in the quoted string.
 ///
 /// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
-const fn consume_quoted_string(
-    input: &[u8],
-    mut i: usize,
-) -> Result<Option<(usize, u8)>> {
+const fn parse_quoted_string(input: &[u8], mut i: usize) -> Result<usize> {
     assert!(
         matches!(get_byte(input, i), Some(b'"')),
         "quoted-string must start with '\"'",
@@ -606,11 +602,7 @@ const fn consume_quoted_string(
         match get_byte(input, i) {
             Some(b'"') => {
                 // End of the quoted-string.
-                i += 1;
-                return Ok(match get_byte(input, i) {
-                    Some(c) => Some((i, c)),
-                    None => None,
-                });
+                return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
             }
             Some(b'\\') => {
                 // Start of quoted-pair.
@@ -645,11 +637,6 @@ const fn consume_quoted_string(
         }
         i += 1;
     }
-}
-
-#[allow(dead_code)]
-const fn is_restricted_quoted_char(c: u8) -> bool {
-    c == 9 || (c > 31 && c != 127)
 }
 
 #[cfg(test)]
