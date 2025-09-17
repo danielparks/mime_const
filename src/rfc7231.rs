@@ -875,7 +875,7 @@ mod tests {
             })
         }
         ok_two_parameters_one_quoted {
-            "a/b; k=\"v\" ; a=b" == Ok(Mime {
+            r#"a/b; k="v" ; a=b"# == Ok(Mime {
                 slash: 1,
                 plus: None,
                 parameters: Parameters::Two(
@@ -895,6 +895,32 @@ mod tests {
                 ..
             })
         }
+        ok_parameter_empty_quoted {
+            r#"a/b; k="""# == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 9,
+                    quoted: true,
+                }),
+                ..
+            })
+        }
+        ok_parameter_quoted_tab {
+            "a/b; k=\"\t\"" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 10,
+                    quoted: true,
+                }),
+                ..
+            })
+        }
         err_space_in_parameter_key {
             "a/b; k =v" == Err(InvalidParameter { pos: 6, byte: Byte(b' ') })
         }
@@ -909,6 +935,21 @@ mod tests {
         }
         err_missing_parameter {
             "a/b;; k=v" == Err(MissingParameter { pos: 4 })
+        }
+        err_parameter_start_quoted {
+            r#"a/b; k="a"# == Err(MissingParameterQuote { pos: 9 })
+        }
+        err_parameter_quoted_invalid_char {
+            "a/b; k=\"\n\"" == Err(InvalidQuotedString {
+                pos: 8,
+                byte: Byte(b'\n'),
+            })
+        }
+        err_parameter_quoted_char_after_end {
+            "a/b; k=\"a\"b" == Err(InvalidParameter {
+                pos: 10,
+                byte: Byte(b'b'),
+            })
         }
     }
 
