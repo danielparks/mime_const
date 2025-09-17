@@ -140,15 +140,6 @@ impl Parser {
             }
         };
 
-        if i >= bytes.len() {
-            return Ok(Mime {
-                source,
-                slash,
-                plus,
-                parameters: Parameters::None,
-            });
-        }
-
         let parameters = try_!(parse_parameters(bytes, i));
         Ok(Mime { source, slash, plus, parameters })
     }
