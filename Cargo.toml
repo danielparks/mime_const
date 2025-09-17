@@ -18,6 +18,5 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-konst = { version = "=0.2.19", default-features = false }
 
 [dev-dependencies]
