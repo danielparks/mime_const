@@ -318,6 +318,161 @@ const fn parse_parameter_key_value(
     }
 }
 
+/// # Parse `quoted-string`.
+///
+/// `input[i]` must by `b'"'`.
+///
+/// Returns the index + 1 of the last byte in the quoted string (always `b'"'`).
+///
+/// [RFC7230 (HTTP) §3.2.6] defines `quoted-string`:
+///
+/// > A string of text is parsed as a single value if it is quoted using
+/// > double-quote marks.
+/// >
+/// > ```ABNF
+/// > quoted-string  = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+/// > qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+/// > obs-text       = %x80-FF
+/// > ```
+/// >
+/// > ...
+/// >
+/// > The backslash octet ("\") can be used as a single-octet quoting
+/// > mechanism within quoted-string and comment constructs.  Recipients
+/// > that process the value of a quoted-string MUST handle a quoted-pair
+/// > as if it were replaced by the octet following the backslash.
+/// >
+/// > ```ABNF
+/// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
+/// > ```
+///
+/// # Panics
+///
+/// If `input.get(i) != Some(b'"')`.
+///
+/// # Errors
+///
+/// Returns variants of [`ParseError`] for errors in the quoted string.
+///
+/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
+const fn parse_quoted_string(input: &[u8], mut i: usize) -> Result<usize> {
+    assert!(
+        matches!(get_byte(input, i), Some(b'"')),
+        "quoted-string must start with '\"'",
+    );
+
+    i += 1;
+    loop {
+        match get_byte(input, i) {
+            Some(b'"') => {
+                // End of the quoted-string.
+                return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
+            }
+            Some(b'\\') => {
+                // Start of quoted-pair.
+                i += 1;
+                match get_byte(input, i) {
+                    // HTAB / SP / VCHAR / obs-text
+                    Some(b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) => (),
+                    Some(c) => {
+                        return Err(ParseError::InvalidQuotedString {
+                            pos: i,
+                            byte: Byte(c),
+                        })
+                    }
+                    None => {
+                        return Err(ParseError::MissingParameterQuote {
+                            pos: i,
+                        })
+                    }
+                }
+            }
+            // HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+            Some(
+                b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
+            ) => (),
+            Some(c) => {
+                return Err(ParseError::InvalidQuotedString {
+                    pos: i,
+                    byte: Byte(c),
+                })
+            }
+            None => return Err(ParseError::MissingParameterQuote { pos: i }),
+        }
+        i += 1;
+    }
+}
+
+/// Convert a `usize` to a `u16`.
+///
+/// # Panics
+///
+/// If the `usize` is larger than [`u16::MAX`].
+#[inline]
+const fn as_u16(i: usize) -> u16 {
+    debug_assert!(i <= u16::MAX as usize, "as_u16 overflow");
+    i as u16
+}
+
+/// Valid token characters are defined in [RFC7231 (HTTP)][RFC7231]:
+///
+/// > ```ABNF
+/// > tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+/// >    "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+/// > ```
+///
+/// We make an exception for `'*'`. FIXME?
+///
+/// [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
+#[inline]
+const fn is_valid_token_byte(c: u8) -> bool {
+    matches!(
+        c,
+        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'+' | b'-' | b'.' | b'^' |
+        b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
+    )
+}
+
+/// Get a byte from the input.
+///
+/// Returns `None` if `i` is past the end of `input`.
+#[inline]
+const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
+    if i < input.len() {
+        Some(input[i])
+    } else {
+        None
+    }
+}
+
+/// Consume valid token bytes and return first non-token byte.
+///
+/// Returns `None` if all the bytes until the end of `input` are token bytes,
+/// otherwise returns the index (and content) of the first non-token byte.
+const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
+    while i < input.len() {
+        if !is_valid_token_byte(input[i]) {
+            return Some((i, input[i]));
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Consume horizontal whitespace (`[ \t]`).
+///
+/// Returns `None` if all the bytes until the end of `input` are whitespace,
+/// otherwise returns the index (and content) of the first non-whitespace byte.
+const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
+    while i < input.len() {
+        if !matches!(input[i], b' ' | b'\t') {
+            return Some((i, input[i]));
+        }
+        i += 1;
+    }
+    None
+}
+
 // FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mime<'a> {
@@ -479,161 +634,6 @@ impl fmt::Debug for Byte {
             0x20..=0x7f => write!(f, "'{}'", self.0 as char),
             _ => write!(f, "'\\x{:02x}'", self.0),
         }
-    }
-}
-
-/// Convert a `usize` to a `u16`.
-///
-/// # Panics
-///
-/// If the `usize` is larger than [`u16::MAX`].
-#[inline]
-const fn as_u16(i: usize) -> u16 {
-    debug_assert!(i <= u16::MAX as usize, "as_u16 overflow");
-    i as u16
-}
-
-/// Valid token characters are defined in [RFC7231 (HTTP)][RFC7231]:
-///
-/// > ```ABNF
-/// > tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
-/// >    "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-/// > ```
-///
-/// We make an exception for `'*'`. FIXME?
-///
-/// [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
-#[inline]
-const fn is_valid_token_byte(c: u8) -> bool {
-    matches!(
-        c,
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'+' | b'-' | b'.' | b'^' |
-        b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
-    )
-}
-
-/// Get a byte from the input.
-///
-/// Returns `None` if `i` is past the end of `input`.
-#[inline]
-const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
-    if i < input.len() {
-        Some(input[i])
-    } else {
-        None
-    }
-}
-
-/// Consume valid token bytes and return first non-token byte.
-///
-/// Returns `None` if all the bytes until the end of `input` are token bytes,
-/// otherwise returns the index (and content) of the first non-token byte.
-const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
-    while i < input.len() {
-        if !is_valid_token_byte(input[i]) {
-            return Some((i, input[i]));
-        }
-        i += 1;
-    }
-    None
-}
-
-/// Consume horizontal whitespace (`[ \t]`).
-///
-/// Returns `None` if all the bytes until the end of `input` are whitespace,
-/// otherwise returns the index (and content) of the first non-whitespace byte.
-const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
-    while i < input.len() {
-        if !matches!(input[i], b' ' | b'\t') {
-            return Some((i, input[i]));
-        }
-        i += 1;
-    }
-    None
-}
-
-/// # Parse `quoted-string`.
-///
-/// `input[i]` must by `b'"'`.
-///
-/// Returns the index + 1 of the last byte in the quoted string (always `b'"'`).
-///
-/// [RFC7230 (HTTP) §3.2.6] defines `quoted-string`:
-///
-/// > A string of text is parsed as a single value if it is quoted using
-/// > double-quote marks.
-/// >
-/// > ```ABNF
-/// > quoted-string  = DQUOTE *( qdtext / quoted-pair ) DQUOTE
-/// > qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
-/// > obs-text       = %x80-FF
-/// > ```
-/// >
-/// > ...
-/// >
-/// > The backslash octet ("\") can be used as a single-octet quoting
-/// > mechanism within quoted-string and comment constructs.  Recipients
-/// > that process the value of a quoted-string MUST handle a quoted-pair
-/// > as if it were replaced by the octet following the backslash.
-/// >
-/// > ```ABNF
-/// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
-/// > ```
-///
-/// # Panics
-///
-/// If `input.get(i) != Some(b'"')`.
-///
-/// # Errors
-///
-/// Returns variants of [`ParseError`] for errors in the quoted string.
-///
-/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
-const fn parse_quoted_string(input: &[u8], mut i: usize) -> Result<usize> {
-    assert!(
-        matches!(get_byte(input, i), Some(b'"')),
-        "quoted-string must start with '\"'",
-    );
-
-    i += 1;
-    loop {
-        match get_byte(input, i) {
-            Some(b'"') => {
-                // End of the quoted-string.
-                return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
-            }
-            Some(b'\\') => {
-                // Start of quoted-pair.
-                i += 1;
-                match get_byte(input, i) {
-                    // HTAB / SP / VCHAR / obs-text
-                    Some(b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) => (),
-                    Some(c) => {
-                        return Err(ParseError::InvalidQuotedString {
-                            pos: i,
-                            byte: Byte(c),
-                        })
-                    }
-                    None => {
-                        return Err(ParseError::MissingParameterQuote {
-                            pos: i,
-                        })
-                    }
-                }
-            }
-            // HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
-            Some(
-                b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
-            ) => (),
-            Some(c) => {
-                return Err(ParseError::InvalidQuotedString {
-                    pos: i,
-                    byte: Byte(c),
-                })
-            }
-            None => return Err(ParseError::MissingParameterQuote { pos: i }),
-        }
-        i += 1;
     }
 }
 
