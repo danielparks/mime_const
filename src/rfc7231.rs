@@ -482,6 +482,11 @@ impl fmt::Debug for Byte {
     }
 }
 
+/// Convert a `usize` to a `u16`.
+///
+/// # Panics
+///
+/// If the `usize` is larger than [`u16::MAX`].
 #[inline]
 const fn as_u16(i: usize) -> u16 {
     debug_assert!(i <= u16::MAX as usize, "as_u16 overflow");
@@ -507,6 +512,9 @@ const fn is_valid_token_byte(c: u8) -> bool {
     )
 }
 
+/// Get a byte from the input.
+///
+/// Returns `None` if `i` is past the end of `input`.
 #[inline]
 const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
     if i < input.len() {
@@ -516,6 +524,10 @@ const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
     }
 }
 
+/// Consume valid token bytes and return first non-token byte.
+///
+/// Returns `None` if all the bytes until the end of `input` are token bytes,
+/// otherwise returns the index (and content) of the first non-token byte.
 const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     while i < input.len() {
         if !is_valid_token_byte(input[i]) {
@@ -527,6 +539,9 @@ const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
 }
 
 /// Consume horizontal whitespace (`[ \t]`).
+///
+/// Returns `None` if all the bytes until the end of `input` are whitespace,
+/// otherwise returns the index (and content) of the first non-whitespace byte.
 const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     while i < input.len() {
         if !matches!(input[i], b' ' | b'\t') {
