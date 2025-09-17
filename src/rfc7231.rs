@@ -149,7 +149,7 @@ impl Parser {
             });
         }
 
-        let parameters = try_!(Self::parse_parameters(bytes, i));
+        let parameters = try_!(parse_parameters(bytes, i));
         Ok(Mime { source, slash, plus, parameters })
     }
 
@@ -221,117 +221,109 @@ impl Parser {
             }
         }
     }
+}
 
-    /// Parse parameters from `bytes` starting at `start`.
-    ///
-    /// Parameters look like `; key=value; key2=value2`.
-    const fn parse_parameters(
-        bytes: &[u8],
-        start: usize,
-    ) -> Result<Parameters> {
-        let one = match try_!(Self::parse_parameter(bytes, start)) {
-            None => return Ok(Parameters::None),
-            Some(one) => one,
-        };
+/// Parse parameters from `bytes` starting at `start`.
+///
+/// Parameters look like `; key=value; key2=value2`.
+const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
+    let one = match try_!(parse_parameter(bytes, start)) {
+        None => return Ok(Parameters::None),
+        Some(one) => one,
+    };
 
-        let two = match try_!(Self::parse_parameter(bytes, one.end as usize)) {
-            None => return Ok(Parameters::One(one)),
-            Some(two) => two,
-        };
+    let two = match try_!(parse_parameter(bytes, one.end as usize)) {
+        None => return Ok(Parameters::One(one)),
+        Some(two) => two,
+    };
 
-        let mut i = match try_!(Self::parse_parameter(bytes, two.end as usize))
-        {
-            None => return Ok(Parameters::Two(one, two)),
+    let mut i = match try_!(parse_parameter(bytes, two.end as usize)) {
+        None => return Ok(Parameters::Two(one, two)),
+        Some(Parameter { end, .. }) => end as usize,
+    };
+
+    // More than two parameters. Parse the remaining parameters to validate
+    // them, but drop the results because we can’t store them.
+    loop {
+        i = match try_!(parse_parameter(bytes, i)) {
+            None => return Ok(Parameters::Many),
             Some(Parameter { end, .. }) => end as usize,
-        };
-
-        // More than two parameters. Parse the remaining parameters to validate
-        // them, but drop the results because we can’t store them.
-        loop {
-            i = match try_!(Self::parse_parameter(bytes, i)) {
-                None => return Ok(Parameters::Many),
-                Some(Parameter { end, .. }) => end as usize,
-            }
         }
     }
+}
 
-    /// Parse a parameter out of `bytes` starting at `start`.
-    ///
-    /// First this consumes the separator (`[ \t]*;[ \t]`), then it passes off
-    /// the actual key=value parsing to [`Self::parse_parameter_key_value()`].
-    const fn parse_parameter(
-        bytes: &[u8],
-        start: usize,
-    ) -> Result<Option<Parameter>> {
-        match consume_whitespace(bytes, start) {
-            None if start < bytes.len() => Err(ParseError::TrailingWhitespace),
-            None => Ok(None),
-            Some((semicolon, b';')) => {
-                match consume_whitespace(bytes, semicolon + 1) {
-                    None => {
-                        Err(ParseError::MissingParameter { pos: semicolon })
-                    }
-                    Some((start, _)) => {
-                        Self::parse_parameter_key_value(bytes, start)
-                    }
-                }
-            }
-            Some((i, c)) => {
-                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+/// Parse a parameter out of `bytes` starting at `start`.
+///
+/// First this consumes the separator (`[ \t]*;[ \t]`), then it passes off
+/// the actual key=value parsing to [`parse_parameter_key_value()`].
+const fn parse_parameter(
+    bytes: &[u8],
+    start: usize,
+) -> Result<Option<Parameter>> {
+    match consume_whitespace(bytes, start) {
+        None if start < bytes.len() => Err(ParseError::TrailingWhitespace),
+        None => Ok(None),
+        Some((semicolon, b';')) => {
+            match consume_whitespace(bytes, semicolon + 1) {
+                None => Err(ParseError::MissingParameter { pos: semicolon }),
+                Some((start, _)) => parse_parameter_key_value(bytes, start),
             }
         }
+        Some((i, c)) => {
+            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+        }
     }
+}
 
-    /// Parse a parameter key=value out of `bytes` starting at `start`.
-    const fn parse_parameter_key_value(
-        bytes: &[u8],
-        start: usize,
-    ) -> Result<Option<Parameter>> {
-        match consume_token(bytes, start) {
-            Some((i, b';')) if i == start => {
-                Err(ParseError::MissingParameter { pos: i })
-            }
-            Some((i, c)) if i == start => {
-                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
-            }
-            Some((equal, b'=')) => {
-                let end = match consume_token(bytes, equal + 1) {
-                    Some((i, b'"')) if i == equal + 1 => {
-                        let end = try_!(parse_quoted_string(bytes, i));
-                        return Ok(Some(Parameter {
-                            start: as_u16(start),
-                            equal: as_u16(equal),
-                            end: as_u16(end),
-                            quoted: true,
-                        }));
-                    }
-                    Some((i, b';' | b' ' | b'\t')) => i,
-                    Some((i, c)) => {
-                        return Err(ParseError::InvalidParameter {
-                            pos: i,
-                            byte: Byte(c),
-                        })
-                    }
-                    None => bytes.len(),
-                };
-
-                if end <= equal + 1 {
-                    // FIXME? is an empty value legal?
-                    Err(ParseError::MissingParameterValue { pos: end })
-                } else {
-                    Ok(Some(Parameter {
+/// Parse a parameter key=value out of `bytes` starting at `start`.
+const fn parse_parameter_key_value(
+    bytes: &[u8],
+    start: usize,
+) -> Result<Option<Parameter>> {
+    match consume_token(bytes, start) {
+        Some((i, b';')) if i == start => {
+            Err(ParseError::MissingParameter { pos: i })
+        }
+        Some((i, c)) if i == start => {
+            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+        }
+        Some((equal, b'=')) => {
+            let end = match consume_token(bytes, equal + 1) {
+                Some((i, b'"')) if i == equal + 1 => {
+                    let end = try_!(parse_quoted_string(bytes, i));
+                    return Ok(Some(Parameter {
                         start: as_u16(start),
                         equal: as_u16(equal),
                         end: as_u16(end),
-                        quoted: false,
-                    }))
+                        quoted: true,
+                    }));
                 }
+                Some((i, b';' | b' ' | b'\t')) => i,
+                Some((i, c)) => {
+                    return Err(ParseError::InvalidParameter {
+                        pos: i,
+                        byte: Byte(c),
+                    })
+                }
+                None => bytes.len(),
+            };
+
+            if end <= equal + 1 {
+                // FIXME? is an empty value legal?
+                Err(ParseError::MissingParameterValue { pos: end })
+            } else {
+                Ok(Some(Parameter {
+                    start: as_u16(start),
+                    equal: as_u16(equal),
+                    end: as_u16(end),
+                    quoted: false,
+                }))
             }
-            Some((i, c)) => {
-                Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
-            }
-            None => Err(ParseError::MissingParameterEqual { pos: start }),
         }
+        Some((i, c)) => {
+            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+        }
+        None => Err(ParseError::MissingParameterEqual { pos: start }),
     }
 }
 
