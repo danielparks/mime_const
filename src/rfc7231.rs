@@ -293,8 +293,17 @@ impl Parser {
             Some((equal, b'=')) => {
                 let end = match consume_token(bytes, equal + 1) {
                     Some((i, b'"')) if i == equal + 1 => {
-                        // FIXME support quotes
-                        panic!("unimplemented");
+                        let end = match try_!(consume_quoted_string(bytes, i)) {
+                            Some((end, _)) => end,
+                            None => bytes.len(),
+                        };
+
+                        return Ok(Some(Parameter {
+                            start: as_u16(start),
+                            equal: as_u16(equal),
+                            end: as_u16(end),
+                            quoted: true,
+                        }));
                     }
                     Some((i, b';' | b' ' | b'\t')) => i,
                     Some((i, c)) => {
@@ -399,6 +408,7 @@ pub enum ParseError {
     InvalidToken { pos: usize, byte: Byte },
     InvalidRange,
     InvalidParameter { pos: usize, byte: Byte },
+    InvalidQuotedString { pos: usize, byte: Byte },
     TrailingWhitespace,
     TooLong,
 }
@@ -452,6 +462,9 @@ impl fmt::Display for ParseError {
             InvalidRange => f.write_str("unexpected asterisk"),
             InvalidParameter { pos, byte } => {
                 write!(f, "invalid parameter, {:?} at position {}", byte, pos)
+            }
+            InvalidQuotedString { pos, byte } => {
+                write!(f, "invalid quoted-string in parameter value, {:?} at position {}", byte, pos)
             }
             TrailingWhitespace => {
                 f.write_str("there is trailing whitespace at the end")
@@ -541,6 +554,95 @@ const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
         i += 1;
     }
     None
+}
+
+/// # Consume `quoted-string`.
+///
+/// `input[i]` must by `b'"'`.
+///
+/// Returns the `Ok(Some((index, byte)))` for the byte following the quoted
+/// string, or `Ok(None)` if it’s the end of the string.
+///
+/// [RFC7230 (HTTP) §3.2.6] defines `quoted-string`:
+///
+/// > A string of text is parsed as a single value if it is quoted using
+/// > double-quote marks.
+/// >
+/// > ```ABNF
+/// > quoted-string  = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+/// > qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+/// > obs-text       = %x80-FF
+/// > ```
+/// >
+/// > ...
+/// >
+/// > The backslash octet ("\") can be used as a single-octet quoting
+/// > mechanism within quoted-string and comment constructs.  Recipients
+/// > that process the value of a quoted-string MUST handle a quoted-pair
+/// > as if it were replaced by the octet following the backslash.
+/// >
+/// > ```ABNF
+/// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
+/// > ```
+///
+/// # Errors
+///
+/// Returns variants of [`ParseError`] for errors in the quoted string.
+///
+/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
+const fn consume_quoted_string(
+    input: &[u8],
+    mut i: usize,
+) -> Result<Option<(usize, u8)>> {
+    assert!(
+        matches!(get_byte(input, i), Some(b'"')),
+        "quoted-string must start with '\"'",
+    );
+
+    i += 1;
+    loop {
+        match get_byte(input, i) {
+            Some(b'"') => {
+                // End of the quoted-string.
+                i += 1;
+                return Ok(match get_byte(input, i) {
+                    Some(c) => Some((i, c)),
+                    None => None,
+                });
+            }
+            Some(b'\\') => {
+                // Start of quoted-pair.
+                i += 1;
+                match get_byte(input, i) {
+                    // HTAB / SP / VCHAR / obs-text
+                    Some(b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) => (),
+                    Some(c) => {
+                        return Err(ParseError::InvalidQuotedString {
+                            pos: i,
+                            byte: Byte(c),
+                        })
+                    }
+                    None => {
+                        return Err(ParseError::MissingParameterQuote {
+                            pos: i,
+                        })
+                    }
+                }
+            }
+            // HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+            Some(
+                b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
+            ) => (),
+            Some(c) => {
+                return Err(ParseError::InvalidQuotedString {
+                    pos: i,
+                    byte: Byte(c),
+                })
+            }
+            None => return Err(ParseError::MissingParameterQuote { pos: i }),
+        }
+        i += 1;
+    }
 }
 
 #[allow(dead_code)]
@@ -745,6 +847,53 @@ mod tests {
                     end: 14,
                     quoted: false,
                 }),
+                ..
+            })
+        }
+        ok_one_parameter_quoted {
+            r#"a/b; k="v""# == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 10,
+                    quoted: true,
+                }),
+                ..
+            })
+        }
+        ok_one_parameter_quoted_quote {
+            r#"a/b; k="a\"b""# == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 13,
+                    quoted: true,
+                }),
+                ..
+            })
+        }
+        ok_two_parameters_one_quoted {
+            "a/b; k=\"v\" ; a=b" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::Two(
+                    Parameter {
+                        start: 5,
+                        equal: 6,
+                        end: 10,
+                        quoted: true,
+                    },
+                    Parameter {
+                        start: 13,
+                        equal: 14,
+                        end: 16,
+                        quoted: false,
+                    },
+                ),
                 ..
             })
         }
