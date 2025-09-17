@@ -110,9 +110,35 @@ impl Parser {
             return Err(ParseError::TooLong);
         }
 
-        let i = try_!(self.consume_type(bytes));
-        let slash = as_u16(i);
-        let (i, plus) = try_!(self.consume_subtype(bytes, i));
+        // Check the first bytes.
+        let (i, slash, plus) = match bytes {
+            [] => {
+                // FIXME? empty
+                return Err(ParseError::MissingSlash);
+            }
+            [b'/', ..] => {
+                return Err(ParseError::MissingType);
+            }
+            [b'*', b'/', b'*'] | [b'*', b'/', b'*', b' ' | b';', ..]
+                if self.accept_media_range =>
+            {
+                // Everything range with or without parameters.
+                (3, 1, None)
+            }
+            // FIXME what about starting with +?
+            [c, ..] if is_valid_token_byte(*c) => {
+                let i = try_!(self.consume_type(bytes));
+                let slash = as_u16(i);
+                let (i, plus) = try_!(self.consume_subtype(bytes, i));
+                (i, slash, plus)
+            }
+            [c, ..] => {
+                return Err(ParseError::InvalidToken {
+                    pos: 0,
+                    byte: Byte(*c),
+                });
+            }
+        };
 
         if i >= bytes.len() {
             return Ok(Mime {
@@ -129,28 +155,6 @@ impl Parser {
 
     /// Validate the type and return the index of the slash.
     const fn consume_type(&self, bytes: &[u8]) -> Result<usize> {
-        // Validate first byte of type token.
-        match bytes {
-            [] => {
-                // FIXME? empty
-                return Err(ParseError::MissingSlash);
-            }
-            [b'*', b'/', ..] if self.accept_media_range => {
-                return Ok(1);
-            }
-            [b'/', ..] => {
-                return Err(ParseError::MissingType);
-            }
-            // FIXME what about starting with +?
-            [c, ..] if is_valid_token_byte(*c) => (),
-            [c, ..] => {
-                return Err(ParseError::InvalidToken {
-                    pos: 0,
-                    byte: Byte(*c),
-                });
-            }
-        }
-
         // Validate rest of type token and find '/'.
         match consume_token(bytes, 1) {
             Some((i, b'/')) => Ok(i),
@@ -951,6 +955,24 @@ mod tests {
                 byte: Byte(b'b'),
             })
         }
+        err_foo_slash_star_star {
+            "foo/**" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+        }
+        err_foo_slash_star_a {
+            "foo/*a" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+        }
+        err_star_slash_foo {
+            "*/foo" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+        }
+        err_star_a_slash_star {
+            "*a/*" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+        }
+        err_star_slash_a_star {
+            "*/*a" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+        }
+        err_star_slash_a_star_one_parameter {
+            "*/*a; k=v" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+        }
     }
 
     // Tests against only the media type parser.
@@ -970,6 +992,32 @@ mod tests {
         }
         range_parse_ok_subtype_range {
             "foo/*" == Ok(Mime { slash: 3, plus: None, .. })
+        }
+        range_parse_ok_everything_range_one_parameter {
+            "*/*; k=v" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 8,
+                    quoted: false,
+                }),
+                ..
+            })
+        }
+        range_parse_ok_subtype_range_one_parameter {
+            "a/*; k=v" == Ok(Mime {
+                slash: 1,
+                plus: None,
+                parameters: Parameters::One(Parameter {
+                    start: 5,
+                    equal: 6,
+                    end: 8,
+                    quoted: false,
+                }),
+                ..
+            })
         }
     }
 }
