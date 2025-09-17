@@ -406,7 +406,6 @@ pub enum ParseError {
     MissingParameterValue { pos: usize }, // FIXME? correct?
     MissingParameterQuote { pos: usize },
     InvalidToken { pos: usize, byte: Byte },
-    InvalidRange,
     InvalidParameter { pos: usize, byte: Byte },
     InvalidQuotedString { pos: usize, byte: Byte },
     TrailingWhitespace,
@@ -459,7 +458,6 @@ impl fmt::Display for ParseError {
             InvalidToken { pos, byte } => {
                 write!(f, "invalid token, {:?} at position {}", byte, pos)
             }
-            InvalidRange => f.write_str("unexpected asterisk"),
             InvalidParameter { pos, byte } => {
                 write!(f, "invalid parameter, {:?} at position {}", byte, pos)
             }
