@@ -5,7 +5,8 @@
 //! so it is mostly copyright 2014-2019 Sean McArthur. See mime-LICENSE.
 //!
 //! There are multiple, contradictory specs defining the format of a media type.
-//! We follow [RFC7231 (HTTP)] because it is least restrictive:
+//! We _mostly_ (see [Parsing details](#parsing-details) below) follow [RFC7231
+//! (HTTP)] because it is least restrictive:
 //!
 //! > ```ABNF
 //! > media-type = type "/" subtype *( OWS ";" OWS parameter )
@@ -56,7 +57,17 @@
 //!
 //! ¯\\\_(ツ)\_/¯
 //!
-//! Notably all RFC6838 media types are also HTTP media types. FIXME: true?
+//! Notably all RFC6838 media types are also HTTP media types. However, HTTP is
+//! more restrictive than, say, [RFC2045 (Internet Message Bodies)][RFC2045],
+//! appears to allow whitespace around the slash and the equals in parameters.
+//!
+//! ## Parsing details
+//!
+//!   * Contrary to the spec, we don’t allow `*` in a type, subtype, parameter
+//!     name, or unquoted parameter value. In a type of subtype it would make it
+//!     hard to distinguish from a range. FIXME? Does this matter?
+//!   * Following the spec, we don’t allow empty unquoted parameter values, but
+//!     do allow empty quoted values.
 //!
 //! [RFC2045]: https://datatracker.ietf.org/doc/html/rfc2045#section-5.1
 //! [RFC4288]: https://datatracker.ietf.org/doc/html/rfc4288#section-4.2
@@ -112,11 +123,7 @@ impl Parser {
 
         // Check the first bytes.
         let (i, slash, plus) = match bytes {
-            [] => {
-                // FIXME? empty
-                return Err(ParseError::MissingSlash);
-            }
-            [b'/', ..] => {
+            [] | [b'/', ..] => {
                 return Err(ParseError::MissingType);
             }
             [b'*', b'/', b'*'] | [b'*', b'/', b'*', b' ' | b';', ..]
@@ -300,7 +307,6 @@ const fn parse_parameter_key_value(
             };
 
             if end <= equal + 1 {
-                // FIXME? is an empty value legal?
                 Err(ParseError::MissingParameterValue { pos: end })
             } else {
                 Ok(Some(Parameter {
@@ -541,7 +547,7 @@ pub enum ParseError {
     MissingSubtype,
     MissingParameter { pos: usize },
     MissingParameterEqual { pos: usize },
-    MissingParameterValue { pos: usize }, // FIXME? correct?
+    MissingParameterValue { pos: usize },
     MissingParameterQuote { pos: usize },
     InvalidToken { pos: usize, byte: Byte },
     InvalidParameter { pos: usize, byte: Byte },
@@ -754,7 +760,7 @@ mod tests {
         ok_subtype_just_plus {
             "foo/+" == Ok(Mime { slash: 3, plus: Some(4), .. })
         }
-        err_empty {  "" == Err(MissingSlash) }
+        err_empty {  "" == Err(MissingType) }
         err_no_slash { "abc" == Err(MissingSlash) }
         err_no_type { "/abc" == Err(MissingType) }
         err_bad_type {
