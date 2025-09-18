@@ -128,7 +128,7 @@ impl Parser {
             [] | [b'/', ..] => {
                 return Err(ParseError::MissingType);
             }
-            [b'*', b'/', b'*'] | [b'*', b'/', b'*', b' ' | b';', ..]
+            b"*/*" | [b'*', b'/', b'*', b' ' | b';', ..]
                 if self.accept_media_range =>
             {
                 // Everything range with or without parameters.
