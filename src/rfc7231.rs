@@ -68,6 +68,8 @@
 //!     hard to distinguish from a range. FIXME? Does this matter?
 //!   * Following the spec, we don’t allow empty unquoted parameter values, but
 //!     do allow empty quoted values.
+//!   * Following the spec, we allow `+` anywhere in the type, subtype,
+//!     parameter names, and unquoted parameter values.
 //!
 //! [RFC2045]: https://datatracker.ietf.org/doc/html/rfc2045#section-5.1
 //! [RFC4288]: https://datatracker.ietf.org/doc/html/rfc4288#section-4.2
@@ -132,7 +134,6 @@ impl Parser {
                 // Everything range with or without parameters.
                 (3, 1, None)
             }
-            // FIXME what about starting with +?
             [c, ..] if is_valid_token_byte(*c) => {
                 let i = try_!(self.consume_type(bytes));
                 let slash = as_u16(i);
@@ -177,7 +178,6 @@ impl Parser {
                 return Err(ParseError::MissingSubtype)
             }
             Some(b'+') => {
-                // FIXME? allow start with +?
                 plus = Some(as_u16(i));
             }
             Some(b'*') if self.accept_media_range => {
