@@ -23,5 +23,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 criterion = "0.5.1"
 
 [[bench]]
-name = "general"
+name = "mime_type"
 harness = false
