@@ -576,7 +576,7 @@ impl fmt::Display for ParseError {
                 write!(
                     f,
                     "missing parameter after the semicolon (;) at position {}",
-                    pos
+                    pos,
                 )
             }
             MissingParameterEqual { pos } => {
@@ -584,14 +584,14 @@ impl fmt::Display for ParseError {
                     f,
                     "an equals sign (=) was missing between a parameter and \
                     its value at position {}",
-                    pos
+                    pos,
                 )
             }
             MissingParameterValue { pos } => {
                 write!(
                     f,
                     "a value was missing in a parameter at position {}",
-                    pos
+                    pos,
                 )
             }
             MissingParameterQuote { pos } => {
@@ -599,7 +599,7 @@ impl fmt::Display for ParseError {
                     f,
                     "a quote (\") was missing from a parameter value at \
                     position {}",
-                    pos
+                    pos,
                 )
             }
             InvalidToken { pos, byte } => {
@@ -609,7 +609,12 @@ impl fmt::Display for ParseError {
                 write!(f, "invalid parameter, {:?} at position {}", byte, pos)
             }
             InvalidQuotedString { pos, byte } => {
-                write!(f, "invalid quoted-string in parameter value, {:?} at position {}", byte, pos)
+                write!(
+                    f,
+                    "invalid quoted-string in parameter value, {:?} at \
+                    position {}",
+                    byte, pos,
+                )
             }
             TrailingWhitespace => {
                 f.write_str("there is trailing whitespace at the end")
