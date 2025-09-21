@@ -45,7 +45,6 @@ where
 }
 
 struct StrMime {
-    _source: &'static str,
     type_: &'static str,
     subtype: &'static str,
     suffix: Option<&'static str>,
@@ -107,19 +106,13 @@ const INDEX_MIME_SVG_USIZE: IndexMime<usize> = IndexMime::<usize> {
     end: 13,
 };
 
-const STR_MIME_TEXT: StrMime = StrMime {
-    _source: "text/plain; charset=utf-8",
-    type_: "text",
-    subtype: "plain",
-    suffix: None,
-};
+/// `text/plain`
+const STR_MIME_TEXT: StrMime =
+    StrMime { type_: "text", subtype: "plain", suffix: None };
 
-const STR_MIME_SVG: StrMime = StrMime {
-    _source: "image/svg+xml",
-    type_: "image",
-    subtype: "svg+xml",
-    suffix: Some("xml"),
-};
+/// `image/svg+xml`
+const STR_MIME_SVG: StrMime =
+    StrMime { type_: "image", subtype: "svg+xml", suffix: Some("xml") };
 
 fn test_mime<M: Mime>(text: M, svg: M) {
     assert_eq!(black_box(text.type_()), "text");
