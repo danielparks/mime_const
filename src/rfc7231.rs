@@ -148,8 +148,10 @@ impl Parser {
             }
         };
 
+        let end = as_u16(i);
+
         let parameters = try_!(parse_parameters(bytes, i));
-        Ok(Mime { source, slash, plus, parameters })
+        Ok(Mime { source, slash, plus, end, parameters })
     }
 
     /// Validate the type and return the index of the slash.
@@ -485,6 +487,7 @@ pub struct Mime<'a> {
     source: Source<'a>,
     slash: u16,
     plus: Option<u16>,
+    end: u16,
     parameters: Parameters,
 }
 
@@ -652,7 +655,12 @@ mod tests {
         (
             $input:expr,
             $parser:expr,
-            Ok(Mime { slash: $slash:expr, plus: $plus:expr, .. })
+            Ok(Mime {
+                slash: $slash:expr,
+                plus: $plus:expr,
+                end: $end:expr,
+                ..
+            })
         ) => {
             assert_eq!(
                 $parser.parse_const($input),
@@ -660,6 +668,7 @@ mod tests {
                     source: Source::Str($input),
                     slash: $slash,
                     plus: $plus,
+                    end: $end,
                     parameters: Parameters::None,
                 })
             );
@@ -670,6 +679,7 @@ mod tests {
             Ok(Mime {
                 slash: $slash:expr,
                 plus: $plus:expr,
+                end: $end:expr,
                 parameters: $parameters:expr,
                 ..
             })
@@ -680,6 +690,7 @@ mod tests {
                     source: Source::Str($input),
                     slash: $slash,
                     plus: $plus,
+                    end: $end,
                     parameters: $parameters,
                 })
             );
@@ -744,21 +755,23 @@ mod tests {
 
     // Tests against both media type and media range parsers.
     tests_both! {
-        ok_type_subtype { "foo/bar" == Ok(Mime { slash: 3, plus: None, .. }) }
+        ok_type_subtype {
+            "foo/bar" == Ok(Mime { slash: 3, plus: None, end: 7, .. })
+        }
         ok_type_subtype_suffix {
-            "foo/bar+hey" == Ok(Mime { slash: 3, plus: Some(7), .. })
+            "foo/bar+hey" == Ok(Mime { slash: 3, plus: Some(7), end: 11, .. })
         }
         ok_multiple_plus {
-            "foo/bar+a+b" == Ok(Mime { slash: 3, plus: Some(7), .. })
+            "foo/bar+a+b" == Ok(Mime { slash: 3, plus: Some(7), end: 11, .. })
         }
         ok_type_plus {
-            "foo+c/bar+a+b" == Ok(Mime { slash: 5, plus: Some(9), .. })
+            "foo+c/bar+a+b" == Ok(Mime { slash: 5, plus: Some(9), end: 13, .. })
         }
         ok_subtype_first_plus {
-            "foo/+a+b" == Ok(Mime { slash: 3, plus: Some(4), .. })
+            "foo/+a+b" == Ok(Mime { slash: 3, plus: Some(4), end: 8, .. })
         }
         ok_subtype_just_plus {
-            "foo/+" == Ok(Mime { slash: 3, plus: Some(4), .. })
+            "foo/+" == Ok(Mime { slash: 3, plus: Some(4), end: 5, .. })
         }
         err_empty {  "" == Err(MissingType) }
         err_no_slash { "abc" == Err(MissingSlash) }
@@ -784,6 +797,7 @@ mod tests {
             "a/b; k=v" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -797,6 +811,7 @@ mod tests {
             "a/b; k=v;key=value" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::Two(
                     Parameter {
                         start: 5,
@@ -818,6 +833,7 @@ mod tests {
             "a/b; k=v;key=value   ;3=3" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::Many,
                 ..
             })
@@ -826,6 +842,7 @@ mod tests {
             "a/b; k=v;key=value   ;3=3 ; 4=4" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::Many,
                 ..
             })
@@ -834,6 +851,7 @@ mod tests {
             "a/b   ;    k=v" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 11,
                     equal: 12,
@@ -847,6 +865,7 @@ mod tests {
             r#"a/b; k="v""# == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -860,6 +879,7 @@ mod tests {
             r#"a/b; k="a\"b""# == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -873,6 +893,7 @@ mod tests {
             r#"a/b; k="v" ; a=b"# == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::Two(
                     Parameter {
                         start: 5,
@@ -894,6 +915,7 @@ mod tests {
             r#"a/b; k="""# == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -907,6 +929,7 @@ mod tests {
             "a/b; k=\"\t\"" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -979,15 +1002,16 @@ mod tests {
     // Tests against only the media range parser.
     tests_range! {
         range_parse_ok_everything_range {
-            "*/*" == Ok(Mime { slash: 1, plus: None, .. })
+            "*/*" == Ok(Mime { slash: 1, plus: None, end: 3, .. })
         }
         range_parse_ok_subtype_range {
-            "foo/*" == Ok(Mime { slash: 3, plus: None, .. })
+            "foo/*" == Ok(Mime { slash: 3, plus: None, end: 5, .. })
         }
         range_parse_ok_everything_range_one_parameter {
             "*/*; k=v" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
@@ -1001,6 +1025,7 @@ mod tests {
             "a/*; k=v" == Ok(Mime {
                 slash: 1,
                 plus: None,
+                end: 3,
                 parameters: Parameters::One(Parameter {
                     start: 5,
                     equal: 6,
