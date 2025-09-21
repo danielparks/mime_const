@@ -25,3 +25,7 @@ criterion = "0.5.1"
 [[bench]]
 name = "mime_type"
 harness = false
+
+[[bench]]
+name = "mime_parse"
+harness = false
