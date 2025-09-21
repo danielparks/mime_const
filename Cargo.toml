@@ -20,3 +20,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 
 [dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "general"
+harness = false
