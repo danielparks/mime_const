@@ -7,7 +7,7 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::{is_valid_token_byte, Parser};
+use mime_const::rfc7231::{is_valid_token_byte, Parser};
 use std::time::Duration;
 
 #[allow(dead_code)]
