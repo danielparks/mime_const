@@ -143,7 +143,6 @@ fn benchmarks(c: &mut Criterion) {
 
     group.bench_function(
         BenchmarkId::new("u8", size_of_val(&INDEX_MIME_TEXT_U8)),
-        //"u8",
         |b| b.iter(|| test_mime(INDEX_MIME_TEXT_U8, INDEX_MIME_SVG_U8)),
     );
     group.bench_function(
