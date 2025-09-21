@@ -7,48 +7,10 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::rfc7231::{is_valid_token_byte, Parser};
+use mime_const::rfc7231::Parser;
+use mime_const::slice::Mime as StrMime;
+use mime_const::slice::Parameter as StrParameter;
 use std::time::Duration;
-
-#[allow(dead_code)]
-struct StrMime {
-    type_: &'static str,
-    subtype: &'static str,
-    suffix: Option<&'static str>,
-}
-
-fn validated(mime: StrMime) -> StrMime {
-    assert!(validate_token(mime.type_));
-    assert!(validate_token(mime.subtype));
-    if let Some(suffix) = mime.suffix {
-        assert!(validate_token(suffix));
-        let subtype_bytes = mime.subtype.as_bytes();
-        let plus = subtype_bytes.len() - suffix.len() - 1;
-        // Check that there’s no + before the suffix.
-        assert!(subtype_bytes[0..plus].iter().copied().all(|b| matches!(
-            b,
-            b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'-' | b'.' | b'^' |
-            b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
-        )));
-
-        // Check suffix is what we expect.
-        assert_eq!(subtype_bytes[plus], b'+');
-        assert_eq!(mime.subtype[plus + 1..], suffix[..]);
-    } else {
-        // Check that there’s no plus, which would imply a suffix.
-        assert!(mime.subtype.as_bytes().iter().copied().all(|b| matches!(
-            b,
-            b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'-' | b'.' | b'^' |
-            b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
-        )));
-    }
-    mime
-}
-
-#[inline]
-fn validate_token(token: &str) -> bool {
-    token.as_bytes().iter().copied().all(is_valid_token_byte)
-}
 
 fn benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("mime_parse");
@@ -61,23 +23,35 @@ fn benchmarks(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(1));
 
     group.bench_function("StrMime literal (text/plain)", |b| {
+        b.iter(|| StrMime::new("text", "plain", None, None, None))
+    });
+
+    group.bench_function("StrMime literal (text/plain; charset=utf-8)", |b| {
         b.iter(|| {
-            validated(StrMime { type_: "text", subtype: "plain", suffix: None })
+            StrMime::new(
+                "text",
+                "plain",
+                None,
+                Some(StrParameter::new("charset", "utf-8").unwrap()),
+                None,
+            )
         })
     });
 
     group.bench_function("StrMime literal (image/svg+xml)", |b| {
-        b.iter(|| {
-            validated(StrMime {
-                type_: "image",
-                subtype: "svg+xml",
-                suffix: Some("xml"),
-            })
-        })
+        b.iter(|| StrMime::new("image", "svg+xml", Some("xml"), None, None))
     });
 
     group.bench_function("parse text/plain", |b| {
         b.iter(|| Parser::type_parser().parse_const("text/plain").unwrap())
+    });
+
+    group.bench_function("parse text/plain; charset=utf-8", |b| {
+        b.iter(|| {
+            Parser::type_parser()
+                .parse_const("text/plain; charset=utf-8")
+                .unwrap()
+        })
     });
 
     group.bench_function("parse image/svg+xml", |b| {

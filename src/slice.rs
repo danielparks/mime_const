@@ -1,0 +1,303 @@
+//! MIME/media type stored as slices.
+
+use crate::rfc7231::{is_valid_token_byte, is_valid_token_byte_not_plus};
+use std::fmt;
+use std::mem;
+
+pub struct Mime {
+    pub(crate) type_: &'static str,
+    pub(crate) subtype: &'static str,
+    pub(crate) suffix: Option<&'static str>,
+    pub(crate) parameters: Parameters,
+}
+
+impl Mime {
+    pub const fn new(
+        type_: &'static str,
+        subtype: &'static str,
+        suffix: Option<&'static str>,
+        parameter_1: Option<Parameter>,
+        parameter_2: Option<Parameter>,
+    ) -> Result<Self> {
+        if !validate_token(type_) {
+            return Err(Error::InvalidType);
+        }
+
+        if let Some(suffix) = suffix {
+            let subtype = subtype.as_bytes();
+            let suffix = suffix.as_bytes();
+
+            if subtype.len() < suffix.len() {
+                return Err(Error::InvalidSuffix);
+            }
+
+            let mut i = 0;
+            let plus = subtype.len() - suffix.len();
+            while i < plus {
+                if !is_valid_token_byte_not_plus(subtype[i]) {
+                    if subtype[i] == b'+' {
+                        return Err(Error::SuffixNotAfterFirstPlus);
+                    } else {
+                        return Err(Error::InvalidSubtype);
+                    }
+                }
+                i += 1;
+            }
+
+            if subtype[plus] != b'+' {
+                return Err(Error::SuffixNotAfterFirstPlus);
+            }
+
+            // Check that the suffix is at the end of the subtype and validate.
+            i = plus + 1;
+            let mut suffix_i = 0;
+            while i < subtype.len() {
+                if subtype[i] != suffix[suffix_i] {
+                    return Err(Error::SuffixNotEndOfSubtype);
+                } else if !is_valid_token_byte(subtype[i]) {
+                    return Err(Error::InvalidSuffix);
+                }
+                i += 1;
+                suffix_i += 1;
+            }
+        } else {
+            // Subtype must not have a plus in it.
+            if !validate_token_no_plus(subtype) {
+                return Err(Error::InvalidSubtype);
+            }
+        }
+
+        let parameters = match (parameter_1, parameter_2) {
+            (None, None) => Parameters::None,
+            (Some(one), None) => Parameters::One(one),
+            (None, Some(one)) => Parameters::One(one),
+            (Some(one), Some(two)) => Parameters::Two(one, two),
+        };
+
+        Ok(Self { type_, subtype, suffix, parameters })
+    }
+
+    pub fn with_parameter(
+        &mut self,
+        name: &'static str,
+        value: &'static str,
+    ) -> &Self {
+        match mem::replace(&mut self.parameters, Parameters::None) {
+            Parameters::None => {
+                self.parameters = Parameters::One(Parameter { name, value });
+            }
+            Parameters::One(one) => {
+                self.parameters =
+                    Parameters::Two(one, Parameter { name, value });
+            }
+            Parameters::Two(one, two) => {
+                self.parameters =
+                    Parameters::Many(vec![one, two, Parameter { name, value }]);
+            }
+            Parameters::Many(mut vec) => {
+                vec.push(Parameter { name, value });
+            }
+        }
+        self
+    }
+
+    pub const fn type_(&self) -> &str {
+        self.type_
+    }
+
+    pub const fn subtype(&self) -> &str {
+        self.subtype
+    }
+
+    pub const fn suffix(&self) -> Option<&str> {
+        self.suffix
+    }
+
+    pub fn parameters<'a>(&'a self) -> ParameterIter<'a> {
+        ParameterIter { parameters: &self.parameters, index: 0 }
+    }
+}
+
+/// Parameters in a MIME type.
+///
+/// Instead, we validate the parameters and re-parse when need to access them.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum Parameters {
+    None,
+    One(Parameter),
+    Two(Parameter, Parameter),
+    /// More than two.
+    Many(Vec<Parameter>),
+}
+
+/// Iterator over parameters.
+pub struct ParameterIter<'a> {
+    parameters: &'a Parameters,
+    index: usize,
+}
+
+impl<'a> Iterator for ParameterIter<'a> {
+    type Item = &'a Parameter;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.parameters {
+            Parameters::None => None,
+            Parameters::One(one) => {
+                if self.index == 0 {
+                    self.index += 1;
+                    Some(one)
+                } else {
+                    None
+                }
+            }
+            Parameters::Two(one, two) => {
+                if self.index == 0 {
+                    self.index += 1;
+                    Some(one)
+                } else if self.index == 1 {
+                    self.index += 1;
+                    Some(two)
+                } else {
+                    None
+                }
+            }
+            Parameters::Many(vec) => match vec.get(self.index) {
+                Some(parameter) => {
+                    self.index += 1;
+                    Some(parameter)
+                }
+                None => None,
+            },
+        }
+    }
+}
+
+/// A single parameter in a MIME type, e.g. “charset=utf-8”.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Parameter {
+    pub(crate) name: &'static str,
+    pub(crate) value: &'static str,
+}
+
+impl Parameter {
+    pub const fn new(name: &'static str, value: &'static str) -> Result<Self> {
+        if !validate_token(name) {
+            Err(Error::InvalidParameterName)
+        } else if !validate_parameter_value(value) {
+            Err(Error::InvalidParameterValue)
+        } else {
+            Ok(Self { name, value })
+        }
+    }
+
+    pub const fn name(&self) -> &str {
+        self.name
+    }
+
+    pub const fn value(&self) -> &str {
+        self.value
+    }
+}
+
+#[inline]
+const fn validate_token(token: &str) -> bool {
+    let mut i = 0;
+    let bytes = token.as_bytes();
+    while i < bytes.len() {
+        if !is_valid_token_byte(bytes[i]) {
+            return false;
+        }
+        i += 1;
+    }
+
+    true
+}
+
+#[inline]
+const fn validate_token_no_plus(token: &str) -> bool {
+    let mut i = 0;
+    let bytes = token.as_bytes();
+    while i < bytes.len() {
+        if !is_valid_token_byte_not_plus(bytes[i]) {
+            return false;
+        }
+        i += 1;
+    }
+
+    true
+}
+
+/// `value` must be representable by `quoted-string`, defined in [RFC7230
+/// (HTTP) §3.2.6]:
+///
+/// > A string of text is parsed as a single value if it is quoted using
+/// > double-quote marks.
+/// >
+/// > ```ABNF
+/// > quoted-string  = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+/// > qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+/// > obs-text       = %x80-FF
+/// > ```
+/// >
+/// > ...
+/// >
+/// > The backslash octet ("\") can be used as a single-octet quoting
+/// > mechanism within quoted-string and comment constructs.  Recipients
+/// > that process the value of a quoted-string MUST handle a quoted-pair
+/// > as if it were replaced by the octet following the backslash.
+/// >
+/// > ```ABNF
+/// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
+/// > ```
+///
+/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
+#[inline]
+const fn validate_parameter_value(value: &str) -> bool {
+    let mut i = 0;
+    let bytes = value.as_bytes();
+    while i < bytes.len() {
+        // HTAB / SP / VCHAR / obs-text
+        if !matches!(bytes[i], b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) {
+            return false;
+        }
+        i += 1;
+    }
+
+    true
+}
+
+/// An error encountered while parsing a media type.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Error {
+    InvalidType,
+    InvalidSubtype,
+    InvalidSuffix,
+    SuffixNotEndOfSubtype,
+    SuffixNotAfterFirstPlus,
+    InvalidParameterName,
+    InvalidParameterValue,
+}
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Error::*;
+        match self {
+            InvalidType => f.write_str("invalid type"),
+            InvalidSubtype => f.write_str("invalid subtype"),
+            InvalidSuffix => f.write_str("invalid suffix"),
+            SuffixNotEndOfSubtype => {
+                f.write_str("suffix does not end the subtype")
+            }
+            SuffixNotAfterFirstPlus => {
+                f.write_str("suffix not immediately after first '+'")
+            }
+            InvalidParameterName => f.write_str("invalid parameter name"),
+            InvalidParameterValue => f.write_str("invalid parameter value"),
+        }
+    }
+}
+
+/// A `Result` with a [`Error`] error type.
+pub type Result<T, E = Error> = std::result::Result<T, E>;

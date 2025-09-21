@@ -9,3 +9,4 @@
 
 pub mod index;
 pub mod rfc7231;
+pub mod slice;
