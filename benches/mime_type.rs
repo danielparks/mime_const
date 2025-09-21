@@ -157,6 +157,8 @@ fn benchmarks(c: &mut Criterion) {
         BenchmarkId::new("str", size_of_val(&STR_MIME_TEXT)),
         |b| b.iter(|| test_mime(STR_MIME_TEXT, STR_MIME_SVG)),
     );
+    // Verify that benchmarks are working — this should take roughly twice as
+    // long as the others.
     group.bench_function(BenchmarkId::new("control", 0), |b| {
         b.iter(|| {
             test_mime(STR_MIME_TEXT, STR_MIME_SVG);
