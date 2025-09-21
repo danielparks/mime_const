@@ -7,7 +7,7 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::Parser;
+use mime_const::{is_valid_token_byte, Parser};
 use std::time::Duration;
 
 #[allow(dead_code)]
@@ -16,6 +16,19 @@ struct StrMime {
     type_: &'static str,
     subtype: &'static str,
     suffix: Option<&'static str>,
+}
+
+fn validated(mime: StrMime) -> StrMime {
+    assert!(validate_token(mime.type_));
+    assert!(validate_token(mime.subtype));
+    if let Some(suffix) = mime.suffix {
+        assert!(validate_token(suffix));
+    }
+    mime
+}
+
+fn validate_token(token: &str) -> bool {
+    token.as_bytes().iter().copied().all(is_valid_token_byte)
 }
 
 fn benchmarks(c: &mut Criterion) {
@@ -29,20 +42,24 @@ fn benchmarks(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(1));
 
     group.bench_function("StrMime literal (text/plain)", |b| {
-        b.iter(|| StrMime {
-            source: "text/plain",
-            type_: "text",
-            subtype: "plain",
-            suffix: None,
+        b.iter(|| {
+            validated(StrMime {
+                source: "text/plain",
+                type_: "text",
+                subtype: "plain",
+                suffix: None,
+            })
         })
     });
 
     group.bench_function("StrMime literal (image/svg+xml)", |b| {
-        b.iter(|| StrMime {
-            source: "image/svg+xml",
-            type_: "image",
-            subtype: "svg+xml",
-            suffix: Some("xml"),
+        b.iter(|| {
+            validated(StrMime {
+                source: "image/svg+xml",
+                type_: "image",
+                subtype: "svg+xml",
+                suffix: Some("xml"),
+            })
         })
     });
 

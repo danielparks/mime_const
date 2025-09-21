@@ -433,7 +433,7 @@ const fn as_u16(i: usize) -> u16 {
 ///
 /// [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
 #[inline]
-const fn is_valid_token_byte(c: u8) -> bool {
+pub const fn is_valid_token_byte(c: u8) -> bool {
     matches!(
         c,
         b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'+' | b'-' | b'.' | b'^' |
