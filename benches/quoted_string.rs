@@ -30,15 +30,21 @@ fn benchmarks(c: &mut Criterion) {
         .warm_up_time(Duration::from_millis(10))
         .measurement_time(Duration::from_millis(100));
 
-    for input in [r#""""#, r#""abc""#, r#""\\\\\"a\\""#] {
+    for input in [
+        r#""""#,
+        r#""abc""#,
+        r#""--==_mimepart_68cbf43c8202e_6c15b8103531""#,
+        r#""\\\\\"a\\""#,
+        r#""\\\\\"a\\bcd\\\\\"a\\bcd\\\\\"a\\bcd\\\\\"a\\bcd""#,
+    ] {
         group.throughput(Throughput::Bytes(input.len().try_into().unwrap()));
         group.bench_with_input(
-            BenchmarkId::new("crate", input.len() - 2),
+            BenchmarkId::new("crate", input),
             input,
             |b, input| b.iter(|| to_content::<TestSpec>(input).unwrap()),
         );
         group.bench_with_input(
-            BenchmarkId::new("unquote_string", input.len() - 2),
+            BenchmarkId::new("unquote_string", input),
             input,
             |b, input| b.iter(|| unquote_quoted_string(input)),
         );
