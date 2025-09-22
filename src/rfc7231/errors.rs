@@ -12,9 +12,9 @@ pub enum ParseError {
     MissingParameterEqual { pos: usize },
     MissingParameterValue { pos: usize },
     MissingParameterQuote { pos: usize },
-    InvalidToken { pos: usize, byte: Byte },
-    InvalidParameter { pos: usize, byte: Byte },
-    InvalidQuotedString { pos: usize, byte: Byte },
+    InvalidToken { pos: usize, byte: u8 },
+    InvalidParameter { pos: usize, byte: u8 },
+    InvalidQuotedString { pos: usize, byte: u8 },
     TrailingWhitespace,
     TooLong,
 }
@@ -63,17 +63,28 @@ impl fmt::Display for ParseError {
                 )
             }
             InvalidToken { pos, byte } => {
-                write!(f, "invalid token, {:?} at position {}", byte, pos)
+                write!(
+                    f,
+                    "invalid token, {:?} at position {}",
+                    Byte(*byte),
+                    pos
+                )
             }
             InvalidParameter { pos, byte } => {
-                write!(f, "invalid parameter, {:?} at position {}", byte, pos)
+                write!(
+                    f,
+                    "invalid parameter, {:?} at position {}",
+                    Byte(*byte),
+                    pos
+                )
             }
             InvalidQuotedString { pos, byte } => {
                 write!(
                     f,
                     "invalid quoted-string in parameter value, {:?} at \
                     position {}",
-                    byte, pos,
+                    Byte(*byte),
+                    pos,
                 )
             }
             TrailingWhitespace => {
@@ -88,13 +99,6 @@ impl fmt::Display for ParseError {
 pub type Result<T, E = ParseError> = std::result::Result<T, E>;
 
 /// Wrapper for `u8` to make displaying bytes as characters easy.
-///
-/// ```
-/// use mime_const::rfc7231::Byte;
-/// assert_eq!(format!("{:?}", Byte(b'a')), "'a'".to_string());
-/// assert_eq!(format!("{:?}", Byte(0)), "'\\0'".to_string());
-/// ```
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Byte(pub u8);
 
 impl fmt::Debug for Byte {
@@ -108,5 +112,20 @@ impl fmt::Debug for Byte {
             0x20..=0x7f => write!(f, "'{}'", self.0 as char),
             _ => write!(f, "'\\x{:02x}'", self.0),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn byte_a() {
+        assert_eq!(format!("{:?}", Byte(b'a')), "'a'".to_string());
+    }
+
+    #[test]
+    fn byte_0() {
+        assert_eq!(format!("{:?}", Byte(0)), "'\\0'".to_string());
     }
 }

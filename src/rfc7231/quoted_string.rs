@@ -5,7 +5,7 @@
 //! [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
 
 use crate::const_utils::get_byte;
-use crate::rfc7231::{Byte, ParseError, Result};
+use crate::rfc7231::{ParseError, Result};
 use std::borrow::Cow;
 
 /// # Parse `quoted-string`.
@@ -70,7 +70,7 @@ pub(crate) const fn parse_quoted_string(
                     Some(c) => {
                         return Err(ParseError::InvalidQuotedString {
                             pos: i,
-                            byte: Byte(c),
+                            byte: c,
                         })
                     }
                     None => {
@@ -85,10 +85,7 @@ pub(crate) const fn parse_quoted_string(
                 b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
             ) => (),
             Some(c) => {
-                return Err(ParseError::InvalidQuotedString {
-                    pos: i,
-                    byte: Byte(c),
-                })
+                return Err(ParseError::InvalidQuotedString { pos: i, byte: c })
             }
             None => return Err(ParseError::MissingParameterQuote { pos: i }),
         }

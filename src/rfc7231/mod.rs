@@ -150,10 +150,7 @@ impl Parser {
                 (i, slash, plus)
             }
             [c, ..] => {
-                return Err(ParseError::InvalidToken {
-                    pos: 0,
-                    byte: Byte(*c),
-                });
+                return Err(ParseError::InvalidToken { pos: 0, byte: *c });
             }
         };
 
@@ -168,9 +165,7 @@ impl Parser {
         // Validate rest of type token and find '/'.
         match consume_token(bytes, 1) {
             Some((i, b'/')) => Ok(i),
-            Some((i, c)) => {
-                Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
-            }
+            Some((i, c)) => Err(ParseError::InvalidToken { pos: i, byte: c }),
             None => Err(ParseError::MissingSlash),
         }
     }
@@ -198,16 +193,13 @@ impl Parser {
                     None | Some(b';' | b' ' | b'\t') => Ok((i + 1, plus)),
                     Some(_) => {
                         // subtype starts with *, which is invalid
-                        Err(ParseError::InvalidToken {
-                            pos: i,
-                            byte: Byte(b'*'),
-                        })
+                        Err(ParseError::InvalidToken { pos: i, byte: b'*' })
                     }
                 };
             }
             Some(c) if is_valid_token_byte(c) => (),
             Some(c) => {
-                return Err(ParseError::InvalidToken { pos: i, byte: Byte(c) })
+                return Err(ParseError::InvalidToken { pos: i, byte: c })
             }
         }
 
@@ -222,10 +214,7 @@ impl Parser {
                 }
                 Some(c) if is_valid_token_byte(c) => (),
                 Some(c) => {
-                    return Err(ParseError::InvalidToken {
-                        pos: i,
-                        byte: Byte(c),
-                    })
+                    return Err(ParseError::InvalidToken { pos: i, byte: c })
                 }
             }
         }
@@ -278,9 +267,7 @@ pub(crate) const fn parse_parameter(
                 Some((start, _)) => parse_parameter_key_value(bytes, start),
             }
         }
-        Some((i, c)) => {
-            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
-        }
+        Some((i, c)) => Err(ParseError::InvalidParameter { pos: i, byte: c }),
     }
 }
 
@@ -294,7 +281,7 @@ const fn parse_parameter_key_value(
             Err(ParseError::MissingParameter { pos: i })
         }
         Some((i, c)) if i == start => {
-            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
+            Err(ParseError::InvalidParameter { pos: i, byte: c })
         }
         Some((equal, b'=')) => {
             let end = match consume_token(bytes, equal + 1) {
@@ -311,7 +298,7 @@ const fn parse_parameter_key_value(
                 Some((i, c)) => {
                     return Err(ParseError::InvalidParameter {
                         pos: i,
-                        byte: Byte(c),
+                        byte: c,
                     })
                 }
                 None => bytes.len(),
@@ -328,9 +315,7 @@ const fn parse_parameter_key_value(
                 }))
             }
         }
-        Some((i, c)) => {
-            Err(ParseError::InvalidParameter { pos: i, byte: Byte(c) })
-        }
+        Some((i, c)) => Err(ParseError::InvalidParameter { pos: i, byte: c }),
         None => Err(ParseError::MissingParameterEqual { pos: start }),
     }
 }
@@ -536,18 +521,18 @@ mod tests {
         err_no_slash { "abc" == Err(MissingSlash) }
         err_no_type { "/abc" == Err(MissingType) }
         err_bad_type {
-            "a b/abc" == Err(InvalidToken { pos: 1, byte: Byte(b' ') })
+            "a b/abc" == Err(InvalidToken { pos: 1, byte: b' ' })
         }
         err_no_subtype { "abc/" == Err(MissingSubtype) }
         err_just_slash {  "/" == Err(MissingType) }
         err_multiple_slash {
-            "ab//c" == Err(InvalidToken { pos: 3, byte: Byte(b'/') })
+            "ab//c" == Err(InvalidToken { pos: 3, byte: b'/' })
         }
         err_multiple_separate_slash {
-            "ab/c/d" == Err(InvalidToken { pos: 4, byte: Byte(b'/') })
+            "ab/c/d" == Err(InvalidToken { pos: 4, byte: b'/' })
         }
         err_subtype_range_suffix {
-            "foo/*+a" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+            "foo/*+a" == Err(InvalidToken { pos: 4, byte: b'*' })
         }
         err_trailing_spaces {
             "a/b   \t" == Err(TrailingWhitespace)
@@ -699,16 +684,16 @@ mod tests {
             })
         }
         err_space_in_parameter_key {
-            "a/b; k =v" == Err(InvalidParameter { pos: 6, byte: Byte(b' ') })
+            "a/b; k =v" == Err(InvalidParameter { pos: 6, byte: b' ' })
         }
         err_space_after_parameter {
             "a/b; k=v " == Err(TrailingWhitespace)
         }
         err_missing_parameter_key {
-            "a/b; =v" == Err(InvalidParameter { pos: 5, byte: Byte(b'=') })
+            "a/b; =v" == Err(InvalidParameter { pos: 5, byte: b'=' })
         }
         err_parameter_double_equal {
-            "a/b; k==v" == Err(InvalidParameter { pos: 7, byte: Byte(b'=') })
+            "a/b; k==v" == Err(InvalidParameter { pos: 7, byte: b'=' })
         }
         err_missing_parameter {
             "a/b;; k=v" == Err(MissingParameter { pos: 4 })
@@ -717,44 +702,38 @@ mod tests {
             r#"a/b; k="a"# == Err(MissingParameterQuote { pos: 9 })
         }
         err_parameter_quoted_invalid_char {
-            "a/b; k=\"\n\"" == Err(InvalidQuotedString {
-                pos: 8,
-                byte: Byte(b'\n'),
-            })
+            "a/b; k=\"\n\"" == Err(InvalidQuotedString { pos: 8, byte: b'\n' })
         }
         err_parameter_quoted_char_after_end {
-            "a/b; k=\"a\"b" == Err(InvalidParameter {
-                pos: 10,
-                byte: Byte(b'b'),
-            })
+            "a/b; k=\"a\"b" == Err(InvalidParameter { pos: 10, byte: b'b' })
         }
         err_foo_slash_star_star {
-            "foo/**" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+            "foo/**" == Err(InvalidToken { pos: 4, byte: b'*' })
         }
         err_foo_slash_star_a {
-            "foo/*a" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+            "foo/*a" == Err(InvalidToken { pos: 4, byte: b'*' })
         }
         err_star_slash_foo {
-            "*/foo" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+            "*/foo" == Err(InvalidToken { pos: 0, byte: b'*' })
         }
         err_star_a_slash_star {
-            "*a/*" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+            "*a/*" == Err(InvalidToken { pos: 0, byte: b'*' })
         }
         err_star_slash_a_star {
-            "*/*a" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+            "*/*a" == Err(InvalidToken { pos: 0, byte: b'*' })
         }
         err_star_slash_a_star_one_parameter {
-            "*/*a; k=v" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+            "*/*a; k=v" == Err(InvalidToken { pos: 0, byte: b'*' })
         }
     }
 
     // Tests against only the media type parser.
     tests_type! {
         type_parse_err_everything_range {
-            "*/*" == Err(InvalidToken { pos: 0, byte: Byte(b'*') })
+            "*/*" == Err(InvalidToken { pos: 0, byte: b'*' })
         }
         type_parse_err_subtype_range {
-            "foo/*" == Err(InvalidToken { pos: 4, byte: Byte(b'*') })
+            "foo/*" == Err(InvalidToken { pos: 4, byte: b'*' })
         }
     }
 
