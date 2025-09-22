@@ -248,7 +248,7 @@ const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
     // them, but drop the results because we can’t store them.
     loop {
         i = match try_!(parse_parameter(bytes, i)) {
-            None => return Ok(Parameters::Many { start: as_u16(start) }),
+            None => return Ok(Parameters::Many),
             Some(Parameter { end, .. }) => end as usize,
         }
     }
@@ -828,7 +828,7 @@ mod tests {
                 slash: 1,
                 plus: None,
                 end: 3,
-                parameters: Parameters::Many { start: 3 },
+                parameters: Parameters::Many,
                 ..
             })
         }
@@ -837,7 +837,7 @@ mod tests {
                 slash: 1,
                 plus: None,
                 end: 3,
-                parameters: Parameters::Many { start: 3 },
+                parameters: Parameters::Many,
                 ..
             })
         }

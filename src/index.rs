@@ -32,7 +32,11 @@ impl<'a> Mime<'a> {
         ParameterIter {
             source: &self.source,
             parameters: &self.parameters,
-            index: 0,
+            index: if matches!(self.parameters, Parameters::Many) {
+                self.end.into()
+            } else {
+                0
+            },
         }
     }
 }
@@ -75,9 +79,7 @@ pub(crate) enum Parameters {
     One(Parameter),
     Two(Parameter, Parameter),
     /// More than two.
-    Many {
-        start: u16,
-    },
+    Many,
 }
 
 /// A single parameter in a MIME type, e.g. “charset=utf-8”.
@@ -152,15 +154,10 @@ impl<'a> Iterator for ParameterIter<'a> {
                     None
                 }
             }
-            Parameters::Many { start } => {
-                let start = if self.index == 0 {
-                    usize::from(*start)
-                } else {
-                    self.index
-                };
-
-                let parameter = parse_parameter(self.source.as_bytes(), start)
-                    .expect("parameters must be valid")?;
+            Parameters::Many => {
+                let parameter =
+                    parse_parameter(self.source.as_bytes(), self.index)
+                        .expect("parameters must be valid")?;
                 self.index = parameter.end.into();
                 Some(parameter.tuple(self.source.as_str()))
             }
