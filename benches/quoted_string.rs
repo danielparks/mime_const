@@ -12,13 +12,7 @@ use criterion::{
 use mime_const::rfc7231::unquote_string;
 use quoted_string::test_utils::TestSpec;
 use quoted_string::to_content;
-use std::borrow::Cow;
 use std::time::Duration;
-
-// Strip quotes
-fn unquote_quoted_string<'a>(input: &'a str) -> Cow<'a, str> {
-    unquote_string(&input[1..input.len() - 1])
-}
 
 fn benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("quoted-string");
@@ -34,6 +28,7 @@ fn benchmarks(c: &mut Criterion) {
         r#""""#,
         r#""abc""#,
         r#""--==_mimepart_68cbf43c8202e_6c15b8103531""#,
+        r#""My file named \"My file\".txt""#,
         r#""\\\\\"a\\""#,
         r#""\\\\\"a\\bcd\\\\\"a\\bcd\\\\\"a\\bcd\\\\\"a\\bcd""#,
     ] {
@@ -45,8 +40,8 @@ fn benchmarks(c: &mut Criterion) {
         );
         group.bench_with_input(
             BenchmarkId::new("unquote_string", input),
-            input,
-            |b, input| b.iter(|| unquote_quoted_string(input)),
+            &input[1..input.len() - 1], // Strip quotes
+            |b, input| b.iter(|| unquote_string(input)),
         );
     }
 
