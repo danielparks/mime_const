@@ -76,11 +76,18 @@
 //! [RFC6838]: https://datatracker.ietf.org/doc/html/rfc6838#section-4.2
 //! [RFC7231 (HTTP)]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
 
+mod errors;
+mod quoted_string;
+
+pub use errors::*;
+pub use quoted_string::*;
+
+use crate::const_utils::get_byte;
 use crate::index::{Mime, Parameter, Parameters, Source};
-use std::borrow::Cow;
-use std::fmt;
 
 /// Replacement for the `?` postfix operator.
+///
+/// Can‘t be made `pub(crate)`, so it’s here instead of in `crate::const_utils`.
 ///
 /// `?` doesn’t work in `const` because it invokes
 /// [`std::convert::Into::into()`], which is not `const`.
@@ -328,91 +335,6 @@ const fn parse_parameter_key_value(
     }
 }
 
-/// # Parse `quoted-string`.
-///
-/// `input[i]` must by `b'"'`.
-///
-/// Returns the index + 1 of the last byte in the quoted string (always `b'"'`).
-///
-/// [RFC7230 (HTTP) §3.2.6] defines `quoted-string`:
-///
-/// > A string of text is parsed as a single value if it is quoted using
-/// > double-quote marks.
-/// >
-/// > ```ABNF
-/// > quoted-string  = DQUOTE *( qdtext / quoted-pair ) DQUOTE
-/// > qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
-/// > obs-text       = %x80-FF
-/// > ```
-/// >
-/// > ...
-/// >
-/// > The backslash octet ("\") can be used as a single-octet quoting
-/// > mechanism within quoted-string and comment constructs.  Recipients
-/// > that process the value of a quoted-string MUST handle a quoted-pair
-/// > as if it were replaced by the octet following the backslash.
-/// >
-/// > ```ABNF
-/// > quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
-/// > ```
-///
-/// # Panics
-///
-/// If `input.get(i) != Some(b'"')`.
-///
-/// # Errors
-///
-/// Returns variants of [`ParseError`] for errors in the quoted string.
-///
-/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
-const fn parse_quoted_string(input: &[u8], mut i: usize) -> Result<usize> {
-    assert!(
-        matches!(get_byte(input, i), Some(b'"')),
-        "quoted-string must start with '\"'",
-    );
-
-    i += 1;
-    loop {
-        match get_byte(input, i) {
-            Some(b'"') => {
-                // End of the quoted-string.
-                return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
-            }
-            Some(b'\\') => {
-                // Start of quoted-pair.
-                i += 1;
-                match get_byte(input, i) {
-                    // HTAB / SP / VCHAR / obs-text
-                    Some(b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) => (),
-                    Some(c) => {
-                        return Err(ParseError::InvalidQuotedString {
-                            pos: i,
-                            byte: Byte(c),
-                        })
-                    }
-                    None => {
-                        return Err(ParseError::MissingParameterQuote {
-                            pos: i,
-                        })
-                    }
-                }
-            }
-            // HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
-            Some(
-                b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
-            ) => (),
-            Some(c) => {
-                return Err(ParseError::InvalidQuotedString {
-                    pos: i,
-                    byte: Byte(c),
-                })
-            }
-            None => return Err(ParseError::MissingParameterQuote { pos: i }),
-        }
-        i += 1;
-    }
-}
-
 /// Convert a `usize` to a `u16`.
 ///
 /// # Panics
@@ -455,18 +377,6 @@ pub(crate) const fn is_valid_token_byte_not_plus(c: u8) -> bool {
     )
 }
 
-/// Get a byte from the input.
-///
-/// Returns `None` if `i` is past the end of `input`.
-#[inline]
-const fn get_byte(input: &[u8], i: usize) -> Option<u8> {
-    if i < input.len() {
-        Some(input[i])
-    } else {
-        None
-    }
-}
-
 /// Consume valid token bytes and return first non-token byte.
 ///
 /// Returns `None` if all the bytes until the end of `input` are token bytes,
@@ -493,151 +403,6 @@ const fn consume_whitespace(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
         i += 1;
     }
     None
-}
-
-/// Unquote a quoted string (without the quotes).
-///
-/// In the [RFC7230 (HTTP) §3.2.6] definition of `quoted-string`:
-///
-/// > The backslash octet ("\") can be used as a single-octet quoting
-/// > mechanism within quoted-string and comment constructs.  Recipients
-/// > that process the value of a quoted-string MUST handle a quoted-pair
-/// > as if it were **replaced by the octet following the backslash.**
-///
-/// My emphasis. In other words, in a quoted string `"\n"` unquotes to `"n"`.
-/// The only uses for the backslash escape are quotes and backslashes.
-///
-/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
-pub fn unquote_string<'a>(input: &'a str) -> Cow<'a, str> {
-    if let Some(i) = input.find('\\') {
-        // FIXME? This will probably over-allocate a bit.
-        let mut output = String::with_capacity(input.len() - 1);
-        output.push_str(&input[..i]);
-
-        let mut input = &input[i + 1..];
-        while let Some(i) = input[1..].find('\\') {
-            // i is relative to input[1..], so:
-            let i = i + 1;
-            // input.len() should never be < 1, because the input should
-            // never end with a single backslash. If it does, panic.
-            output.push_str(&input[..i]);
-            input = &input[i + 1..];
-        }
-
-        output.push_str(input);
-        Cow::from(output)
-    } else {
-        Cow::from(input)
-    }
-}
-
-/// An error encountered while parsing a media type.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParseError {
-    MissingType,
-    MissingSlash,
-    MissingSubtype,
-    MissingParameter { pos: usize },
-    MissingParameterEqual { pos: usize },
-    MissingParameterValue { pos: usize },
-    MissingParameterQuote { pos: usize },
-    InvalidToken { pos: usize, byte: Byte },
-    InvalidParameter { pos: usize, byte: Byte },
-    InvalidQuotedString { pos: usize, byte: Byte },
-    TrailingWhitespace,
-    TooLong,
-}
-
-impl std::error::Error for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ParseError::*;
-        match self {
-            MissingType => f.write_str("missing type before the slash (/)"),
-            MissingSlash => f.write_str(
-                "a slash (/) was missing between the type and subtype",
-            ),
-            MissingSubtype => {
-                f.write_str("missing subtype after the slash (/)")
-            }
-            MissingParameter { pos } => {
-                write!(
-                    f,
-                    "missing parameter after the semicolon (;) at position {}",
-                    pos,
-                )
-            }
-            MissingParameterEqual { pos } => {
-                write!(
-                    f,
-                    "an equals sign (=) was missing between a parameter and \
-                    its value at position {}",
-                    pos,
-                )
-            }
-            MissingParameterValue { pos } => {
-                write!(
-                    f,
-                    "a value was missing in a parameter at position {}",
-                    pos,
-                )
-            }
-            MissingParameterQuote { pos } => {
-                write!(
-                    f,
-                    "a quote (\") was missing from a parameter value at \
-                    position {}",
-                    pos,
-                )
-            }
-            InvalidToken { pos, byte } => {
-                write!(f, "invalid token, {:?} at position {}", byte, pos)
-            }
-            InvalidParameter { pos, byte } => {
-                write!(f, "invalid parameter, {:?} at position {}", byte, pos)
-            }
-            InvalidQuotedString { pos, byte } => {
-                write!(
-                    f,
-                    "invalid quoted-string in parameter value, {:?} at \
-                    position {}",
-                    byte, pos,
-                )
-            }
-            TrailingWhitespace => {
-                f.write_str("there is trailing whitespace at the end")
-            }
-            TooLong => f.write_str("the string is too long"),
-        }
-    }
-}
-
-/// A `Result` with a [`ParseError`] error type.
-pub type Result<T, E = ParseError> = std::result::Result<T, E>;
-
-/// Wrapper for `u8` to make displaying bytes as characters easy.
-///
-/// ```
-/// use mime_const::rfc7231::Byte;
-/// assert_eq!(format!("{:?}", Byte(b'a')), "'a'".to_string());
-/// assert_eq!(format!("{:?}", Byte(0)), "'\\0'".to_string());
-/// ```
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Byte(pub u8);
-
-impl fmt::Debug for Byte {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            b'\n' => f.write_str("'\\n'"),
-            b'\r' => f.write_str("'\\r'"),
-            b'\t' => f.write_str("'\\t'"),
-            b'\\' => f.write_str("'\\'"),
-            b'\0' => f.write_str("'\\0'"),
-            0x20..=0x7f => write!(f, "'{}'", self.0 as char),
-            _ => write!(f, "'\\x{:02x}'", self.0),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1029,31 +794,5 @@ mod tests {
                 ..
             })
         }
-    }
-
-    #[test]
-    fn quoted_string_boring() {
-        assert_eq!(unquote_string(""), "");
-        assert_eq!(unquote_string("abc"), "abc");
-    }
-
-    #[test]
-    fn quoted_string_backslash_n() {
-        assert_eq!(unquote_string(r#"\n"#), "n");
-    }
-
-    #[test]
-    fn quoted_string_backslash_quote() {
-        assert_eq!(unquote_string(r#"a\"b"#), r#"a"b"#);
-    }
-
-    #[test]
-    fn quoted_string_backslash_backslash() {
-        assert_eq!(unquote_string(r#"a\\b"#), r#"a\b"#);
-    }
-
-    #[test]
-    fn quoted_string_complicated() {
-        assert_eq!(unquote_string(r#"\\\\\"a\\"#), r#"\\"a\"#);
     }
 }
