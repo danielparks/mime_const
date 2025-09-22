@@ -116,20 +116,15 @@ pub fn unquote_string<'a>(input: &'a str) -> Cow<'a, str> {
         output.push_str(&input[..i]);
 
         let mut input = &input[i + 1..];
-        while let Some(i) = input.find('\\') {
-            let i = if i == 0 {
-                // Found double backslash. Search for next backslash.
-                //
-                // We can’t just search out of input[1..] initially because it
-                // might slice in the middle of a char.
-                if let Some(i) = &input[1..].find('\\') {
-                    i + 1 // find started at 1
-                } else {
-                    break;
-                }
-            } else {
-                i
-            };
+        // Use as_bytes() here so that we don’t slice through a char.
+        while let Some(i) =
+            input.as_bytes()[1..].iter().position(|b| *b == b'\\')
+        {
+            // We pass the byte immediately after the backlash through
+            // regardless, so we start searching for the next backslash after
+            // it. This means that i is relative to the first byte, rather than
+            // the zeroth. Fix it:
+            let i = i + 1;
 
             // input.len() should never be < 1, because the input should
             // never end with a single backslash. If it does, panic.
