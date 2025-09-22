@@ -248,7 +248,7 @@ const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
     // them, but drop the results because we can’t store them.
     loop {
         i = match try_!(parse_parameter(bytes, i)) {
-            None => return Ok(Parameters::Many),
+            None => return Ok(Parameters::Many { start: as_u16(start) }),
             Some(Parameter { end, .. }) => end as usize,
         }
     }
@@ -258,7 +258,7 @@ const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
 ///
 /// First this consumes the separator (`[ \t]*;[ \t]`), then it passes off
 /// the actual key=value parsing to [`parse_parameter_key_value()`].
-const fn parse_parameter(
+pub(crate) const fn parse_parameter(
     bytes: &[u8],
     start: usize,
 ) -> Result<Option<Parameter>> {
@@ -828,7 +828,7 @@ mod tests {
                 slash: 1,
                 plus: None,
                 end: 3,
-                parameters: Parameters::Many,
+                parameters: Parameters::Many { start: 3 },
                 ..
             })
         }
@@ -837,7 +837,7 @@ mod tests {
                 slash: 1,
                 plus: None,
                 end: 3,
-                parameters: Parameters::Many,
+                parameters: Parameters::Many { start: 3 },
                 ..
             })
         }

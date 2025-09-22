@@ -1,6 +1,6 @@
 //! MIME/media type stored as a slice with indices to its parts.
 
-use crate::rfc7231::unquote_string;
+use crate::rfc7231::{parse_parameter, unquote_string};
 use std::borrow::Cow;
 
 // FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
@@ -45,6 +45,14 @@ pub(crate) enum Source<'a> {
 }
 
 impl<'a> Source<'a> {
+    /// Get the source as a byte slice.
+    pub fn as_bytes(&'a self) -> &'a [u8] {
+        match self {
+            Self::Str(src) => src.as_bytes(),
+            Self::Owned(src) => src.as_bytes(),
+        }
+    }
+
     /// Get the source as a `&str`.
     pub fn as_str(&'a self) -> &'a str {
         match self {
@@ -67,7 +75,9 @@ pub(crate) enum Parameters {
     One(Parameter),
     Two(Parameter, Parameter),
     /// More than two.
-    Many,
+    Many {
+        start: u16,
+    },
 }
 
 /// A single parameter in a MIME type, e.g. “charset=utf-8”.
@@ -142,8 +152,17 @@ impl<'a> Iterator for ParameterIter<'a> {
                     None
                 }
             }
-            Parameters::Many => {
-                panic!("unimplemented"); // FIXME
+            Parameters::Many { start } => {
+                let start = if self.index == 0 {
+                    usize::from(*start)
+                } else {
+                    self.index
+                };
+
+                let parameter = parse_parameter(self.source.as_bytes(), start)
+                    .expect("parameters must be valid")?;
+                self.index = parameter.end.into();
+                Some(parameter.tuple(self.source.as_str()))
             }
         }
     }
