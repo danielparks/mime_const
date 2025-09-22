@@ -131,8 +131,8 @@ fn benchmarks(c: &mut Criterion) {
         .significance_level(0.01)
         .confidence_level(0.99)
         .sample_size(300)
-        .warm_up_time(Duration::from_millis(100))
-        .measurement_time(Duration::from_secs(1));
+        .warm_up_time(Duration::from_millis(10))
+        .measurement_time(Duration::from_millis(100));
 
     group.bench_function(
         BenchmarkId::new("u8", size_of_val(&INDEX_MIME_TEXT_U8)),

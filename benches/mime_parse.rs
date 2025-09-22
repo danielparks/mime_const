@@ -19,8 +19,8 @@ fn benchmarks(c: &mut Criterion) {
         .significance_level(0.01)
         .confidence_level(0.99)
         .sample_size(300)
-        .warm_up_time(Duration::from_millis(100))
-        .measurement_time(Duration::from_secs(1));
+        .warm_up_time(Duration::from_millis(10))
+        .measurement_time(Duration::from_millis(100));
 
     group.bench_function("StrMime literal (text/plain)", |b| {
         b.iter(|| StrMime::new("text", "plain", None, None, None))
