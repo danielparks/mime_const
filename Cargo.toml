@@ -21,6 +21,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 criterion = "0.5.1"
+quoted-string = "0.6.1"
 
 [[bench]]
 name = "mime_type"
@@ -28,4 +29,8 @@ harness = false
 
 [[bench]]
 name = "mime_parse"
+harness = false
+
+[[bench]]
+name = "quoted_string"
 harness = false
