@@ -116,9 +116,21 @@ pub fn unquote_string<'a>(input: &'a str) -> Cow<'a, str> {
         output.push_str(&input[..i]);
 
         let mut input = &input[i + 1..];
-        while let Some(i) = input[1..].find('\\') {
-            // i is relative to input[1..], so:
-            let i = i + 1;
+        while let Some(i) = input.find('\\') {
+            let i = if i == 0 {
+                // Found double backslash. Search for next backslash.
+                //
+                // We can’t just search out of input[1..] initially because it
+                // might slice in the middle of a char.
+                if let Some(i) = &input[1..].find('\\') {
+                    i + 1 // find started at 1
+                } else {
+                    break;
+                }
+            } else {
+                i
+            };
+
             // input.len() should never be < 1, because the input should
             // never end with a single backslash. If it does, panic.
             output.push_str(&input[..i]);
@@ -160,5 +172,10 @@ mod tests {
     #[test]
     fn quoted_string_complicated() {
         assert_eq!(unquote_string(r#"\\\\\"a\\"#), r#"\\"a\"#);
+    }
+
+    #[test]
+    fn quoted_string_unicode() {
+        assert_eq!(unquote_string(r#"\🙂"#), r#"🙂"#);
     }
 }
