@@ -19,6 +19,52 @@ pub enum ParseError {
     TooLong,
 }
 
+impl ParseError {
+    /// Panic with an appropriate message.
+    ///
+    /// Used in `const` context where `format!()` cannot be used.
+    pub(crate) const fn panic(&self) {
+        use ParseError::*;
+        match self {
+            MissingType => panic!("missing type before the slash (/)"),
+            MissingSlash => {
+                panic!("a slash (/) was missing between the type and subtype",)
+            }
+            MissingSubtype => {
+                panic!("missing subtype after the slash (/)")
+            }
+            MissingParameter { .. } => {
+                panic!("missing parameter after the semicolon (;)")
+            }
+            MissingParameterEqual { .. } => {
+                panic!(
+                    "an equals sign (=) was missing between a parameter and \
+                    its value"
+                )
+            }
+            MissingParameterValue { .. } => {
+                panic!("a value was missing in a parameter")
+            }
+            MissingParameterQuote { .. } => {
+                panic!("a quote (\") was missing from a parameter value")
+            }
+            InvalidToken { .. } => {
+                panic!("invalid token")
+            }
+            InvalidParameter { .. } => {
+                panic!("invalid parameter")
+            }
+            InvalidQuotedString { .. } => {
+                panic!("invalid quoted-string in parameter value")
+            }
+            TrailingWhitespace => {
+                panic!("there is trailing whitespace at the end")
+            }
+            TooLong => panic!("the string is too long"),
+        }
+    }
+}
+
 impl std::error::Error for ParseError {}
 
 impl fmt::Display for ParseError {

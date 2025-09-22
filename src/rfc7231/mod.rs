@@ -84,7 +84,7 @@ pub use errors::*;
 pub use quoted_string::*;
 
 use crate::const_utils::get_byte;
-use crate::index::{Mime, Parameter, Parameters, Source};
+use crate::index::{Mime, Parameter, Parameters};
 
 /// Replacement for the `?` postfix operator.
 ///
@@ -112,7 +112,7 @@ pub struct Parser {
 impl Parser {
     /// Create a `Parser` that can parse media ranges, e.g. `text/*`.
     #[inline]
-    pub fn range_parser() -> Self {
+    pub const fn range_parser() -> Self {
         Parser { accept_media_range: true }
     }
 
@@ -120,15 +120,13 @@ impl Parser {
     ///
     /// It will reject media ranges, e.g. `text/*`.
     #[inline]
-    pub fn type_parser() -> Self {
+    pub const fn type_parser() -> Self {
         Parser { accept_media_range: false }
     }
 
     /// Actually do the parsing.
-    pub const fn parse_const<'a>(&self, src: &'a str) -> Result<Mime<'a>> {
-        let source = Source::Str(src);
-        let bytes = src.as_bytes();
-
+    pub const fn parse_const<'a>(&self, source: &'a str) -> Result<Mime<'a>> {
+        let bytes = source.as_bytes();
         if bytes.len() > u16::MAX as usize {
             return Err(ParseError::TooLong);
         }
