@@ -20,7 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = { version = "0.*", default-features = false }
 quoted-string = "0.6.1"
 
 [[bench]]
