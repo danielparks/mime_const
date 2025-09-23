@@ -18,7 +18,6 @@ pub struct Mime<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Source<'a> {
     Str(&'a str),
-    #[allow(dead_code)] // FIXME
     Owned(String),
 }
 
@@ -98,6 +97,30 @@ impl<'a> Mime<'a> {
             }
             Err(error) => Err(error),
         }
+    }
+
+    /// Parse a media type or return an error.
+    ///
+    /// ```rust
+    /// use mime_const::index::Mime;
+    ///
+    /// let mime = Mime::new("text/plain").unwrap();
+    /// assert_eq!(mime.type_(), "text");
+    /// assert_eq!(mime.subtype(), "plain");
+    /// assert_eq!(mime.parameters().next(), None);
+    /// ```
+    pub fn new<S: Into<String>>(input: S) -> Result<Self> {
+        let source = Source::Owned(input.into());
+        Parser::type_parser().parse_const(source.as_str()).map(
+            |ConstMime { source: _, slash, plus, end, parameters }| Mime {
+                // FIXME we can do this without clone.
+                source: source.clone(),
+                slash,
+                plus,
+                end,
+                parameters,
+            },
+        )
     }
 
     pub fn type_(&self) -> &str {
