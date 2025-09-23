@@ -1,20 +1,47 @@
 //! MIME/media type stored as a slice with indices to its parts.
 
-use crate::rfc7231::{parse_parameter, unquote_string, Parser};
+use crate::rfc7231::{
+    parse_parameter, unquote_string, ConstMime, Parser, Result,
+};
 use std::borrow::Cow;
 
 // FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Mime<'a> {
-    pub(crate) source: &'a str,
-    pub(crate) slash: u16,
-    pub(crate) plus: Option<u16>,
-    pub(crate) end: u16,
-    pub(crate) parameters: Parameters,
+    source: Source<'a>,
+    slash: u16,
+    plus: Option<u16>,
+    end: u16,
+    parameters: Parameters,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Source<'a> {
+    Str(&'a str),
+    #[allow(dead_code)] // FIXME
+    Owned(String),
+}
+
+impl<'a> Source<'a> {
+    /// Get the source as a byte slice.
+    fn as_bytes(&'a self) -> &'a [u8] {
+        match self {
+            Self::Str(src) => src.as_bytes(),
+            Self::Owned(src) => src.as_bytes(),
+        }
+    }
+
+    /// Get the source as a `&str`.
+    fn as_str(&'a self) -> &'a str {
+        match self {
+            Self::Str(src) => src,
+            Self::Owned(src) => src.as_str(),
+        }
+    }
 }
 
 impl<'a> Mime<'a> {
-    /// Parse a media type at compile time.
+    /// Parse a media type at compile time or panic.
     ///
     /// ```rust
     /// use mime_const::index::Mime;
@@ -32,8 +59,15 @@ impl<'a> Mime<'a> {
     /// }
     /// ```
     pub const fn constant(input: &'a str) -> Self {
+        // Can’t use `try_constant()` because Self might be dropped.
         match Parser::type_parser().parse_const(input) {
-            Ok(mime) => mime,
+            Ok(ConstMime { source, slash, plus, end, parameters }) => Mime {
+                source: Source::Str(source),
+                slash,
+                plus,
+                end,
+                parameters,
+            },
             Err(error) => {
                 error.panic();
                 panic!("error.panic() did not panic");
@@ -41,22 +75,48 @@ impl<'a> Mime<'a> {
         }
     }
 
+    /// Parse a media type at compile time or return an error.
+    ///
+    /// ```rust
+    /// use mime_const::index::Mime;
+    ///
+    /// let mime = Mime::try_constant("text/plain").unwrap();
+    /// assert_eq!(mime.type_(), "text");
+    /// assert_eq!(mime.subtype(), "plain");
+    /// assert_eq!(mime.parameters().next(), None);
+    /// ```
+    pub const fn try_constant(input: &'a str) -> Result<Self> {
+        match Parser::type_parser().parse_const(input) {
+            Ok(ConstMime { source, slash, plus, end, parameters }) => {
+                Ok(Mime {
+                    source: Source::Str(source),
+                    slash,
+                    plus,
+                    end,
+                    parameters,
+                })
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn type_(&self) -> &str {
-        &self.source[0..self.slash.into()]
+        &self.source.as_str()[0..self.slash.into()]
     }
 
     pub fn subtype(&self) -> &str {
-        &self.source[usize::from(self.slash) + 1..self.end.into()]
+        &self.source.as_str()[usize::from(self.slash) + 1..self.end.into()]
     }
 
     pub fn suffix(&self) -> Option<&str> {
-        self.plus
-            .map(|plus| &self.source[usize::from(plus) + 1..self.end.into()])
+        self.plus.map(|plus| {
+            &self.source.as_str()[usize::from(plus) + 1..self.end.into()]
+        })
     }
 
     pub fn parameters(&'a self) -> ParameterIter<'a> {
         ParameterIter {
-            source: self.source,
+            source: &self.source,
             parameters: &self.parameters,
             index: if matches!(self.parameters, Parameters::Many) {
                 self.end.into()
@@ -124,7 +184,7 @@ impl Parameter {
 
 /// Iterator over parameters.
 pub struct ParameterIter<'a> {
-    source: &'a str,
+    source: &'a Source<'a>,
     parameters: &'a Parameters,
     index: usize,
 }
@@ -138,7 +198,7 @@ impl<'a> Iterator for ParameterIter<'a> {
             Parameters::One(one) => {
                 if self.index == 0 {
                     self.index += 1;
-                    Some(one.tuple(self.source))
+                    Some(one.tuple(self.source.as_str()))
                 } else {
                     None
                 }
@@ -146,10 +206,10 @@ impl<'a> Iterator for ParameterIter<'a> {
             Parameters::Two(one, two) => {
                 if self.index == 0 {
                     self.index += 1;
-                    Some(one.tuple(self.source))
+                    Some(one.tuple(self.source.as_str()))
                 } else if self.index == 1 {
                     self.index += 1;
-                    Some(two.tuple(self.source))
+                    Some(two.tuple(self.source.as_str()))
                 } else {
                     None
                 }
@@ -159,7 +219,7 @@ impl<'a> Iterator for ParameterIter<'a> {
                     parse_parameter(self.source.as_bytes(), self.index)
                         .expect("parameters must be valid")?;
                 self.index = parameter.end.into();
-                Some(parameter.tuple(self.source))
+                Some(parameter.tuple(self.source.as_str()))
             }
         }
     }

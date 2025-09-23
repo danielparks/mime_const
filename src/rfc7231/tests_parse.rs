@@ -12,7 +12,7 @@ macro_rules! assert_parse {
     ) => {
         assert_eq!(
             $parser.parse_const($input),
-            Ok(Mime {
+            Ok(ConstMime {
                 source: $input,
                 slash: $slash,
                 plus: $plus,
@@ -34,7 +34,7 @@ macro_rules! assert_parse {
     ) => {
         assert_eq!(
             $parser.parse_const($input),
-            Ok(Mime {
+            Ok(ConstMime {
                 source: $input,
                 slash: $slash,
                 plus: $plus,

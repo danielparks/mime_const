@@ -84,7 +84,7 @@ pub use errors::*;
 pub use quoted_string::*;
 
 use crate::const_utils::get_byte;
-use crate::index::{Mime, Parameter, Parameters};
+use crate::index::{Parameter, Parameters};
 
 /// Replacement for the `?` postfix operator.
 ///
@@ -103,8 +103,17 @@ macro_rules! try_ {
 
 /// Parser for media types.
 #[derive(Clone, Debug)]
-pub struct Parser {
+pub(crate) struct Parser {
     pub accept_media_range: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct ConstMime<'a> {
+    pub(crate) source: &'a str,
+    pub(crate) slash: u16,
+    pub(crate) plus: Option<u16>,
+    pub(crate) end: u16,
+    pub(crate) parameters: Parameters,
 }
 
 // FIXME how do we deal with case?
@@ -112,7 +121,8 @@ pub struct Parser {
 impl Parser {
     /// Create a `Parser` that can parse media ranges, e.g. `text/*`.
     #[inline]
-    pub const fn range_parser() -> Self {
+    #[allow(dead_code)]
+    pub(crate) const fn range_parser() -> Self {
         Parser { accept_media_range: true }
     }
 
@@ -120,12 +130,15 @@ impl Parser {
     ///
     /// It will reject media ranges, e.g. `text/*`.
     #[inline]
-    pub const fn type_parser() -> Self {
+    pub(crate) const fn type_parser() -> Self {
         Parser { accept_media_range: false }
     }
 
     /// Actually do the parsing.
-    pub const fn parse_const<'a>(&self, source: &'a str) -> Result<Mime<'a>> {
+    pub(crate) const fn parse_const<'a>(
+        &self,
+        source: &'a str,
+    ) -> Result<ConstMime<'a>> {
         let bytes = source.as_bytes();
         if bytes.len() > u16::MAX as usize {
             return Err(ParseError::TooLong);
@@ -156,7 +169,7 @@ impl Parser {
         let end = as_u16(i);
 
         let parameters = try_!(parse_parameters(bytes, i));
-        Ok(Mime { source, slash, plus, end, parameters })
+        Ok(ConstMime { source, slash, plus, end, parameters })
     }
 
     /// Validate the type and return the index of the slash.

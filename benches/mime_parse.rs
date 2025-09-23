@@ -7,7 +7,7 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::rfc7231::Parser;
+use mime_const::index::Mime as IndexMime;
 use mime_const::slice::Mime as StrMime;
 use mime_const::slice::Parameter as StrParameter;
 use std::time::Duration;
@@ -43,19 +43,15 @@ fn benchmarks(c: &mut Criterion) {
     });
 
     group.bench_function("parse text/plain", |b| {
-        b.iter(|| Parser::type_parser().parse_const("text/plain").unwrap())
+        b.iter(|| IndexMime::constant("text/plain"))
     });
 
     group.bench_function("parse text/plain; charset=utf-8", |b| {
-        b.iter(|| {
-            Parser::type_parser()
-                .parse_const("text/plain; charset=utf-8")
-                .unwrap()
-        })
+        b.iter(|| IndexMime::constant("text/plain; charset=utf-8"))
     });
 
     group.bench_function("parse image/svg+xml", |b| {
-        b.iter(|| Parser::type_parser().parse_const("image/svg+xml").unwrap())
+        b.iter(|| IndexMime::constant("image/svg+xml"))
     });
 
     group.finish();
