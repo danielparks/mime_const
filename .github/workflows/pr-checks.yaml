@@ -54,7 +54,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-msrv
-      - run: cargo msrv verify
+      - run: cargo msrv verify --ignore-lockfile
 
   test:
     name: cargo test
