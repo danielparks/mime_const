@@ -44,7 +44,7 @@ impl<'a> Mime<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Source<'a> {
     Str(&'a str),
-    #[expect(dead_code, reason = "FIXME")]
+    #[allow(dead_code)] // FIXME
     Owned(String),
 }
 
