@@ -145,7 +145,7 @@ impl fmt::Display for ParseError {
 pub type Result<T, E = ParseError> = std::result::Result<T, E>;
 
 /// Wrapper for `u8` to make displaying bytes as characters easy.
-pub struct Byte(pub u8);
+struct Byte(pub u8);
 
 impl fmt::Debug for Byte {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
