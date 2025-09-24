@@ -6,8 +6,8 @@ use crate::rfc7231::{
 use std::borrow::Cow;
 use std::fmt;
 
-// FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
-#[derive(Clone, Debug)]
+// FIXME should implement Ord and PartialOrd manually
+#[derive(Clone, Debug, Eq)]
 pub struct Mime<'a> {
     source: Source<'a>,
     slash: u16,
@@ -130,6 +130,25 @@ impl<'a> Mime<'a> {
             },
         }
     }
+
+    /// Are there any parameters?
+    #[must_use]
+    pub fn has_parameters(&'a self) -> bool {
+        !matches!(&self.parameters, Parameters::None)
+    }
+
+    /// Get the maximum number of parameters with a cheap check.
+    ///
+    /// Returns `0`, `1`, `2`, or [`usize::MAX`].
+    #[must_use]
+    pub fn parameters_len_max(&'a self) -> usize {
+        match &self.parameters {
+            Parameters::None => 0,
+            Parameters::One(_) => 1,
+            Parameters::Two(_, _) => 2,
+            Parameters::Many => usize::MAX,
+        }
+    }
 }
 
 impl fmt::Display for Mime<'_> {
@@ -139,6 +158,25 @@ impl fmt::Display for Mime<'_> {
             write!(f, "; {}={}", key, value)?;
         }
         Ok(())
+    }
+}
+
+impl<'a> PartialEq for Mime<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        // FIXME can we do this without all the allocations?
+        fn sorted_params<'b>(mime: &'b Mime) -> Vec<(String, Cow<'b, str>)> {
+            let mut vec: Vec<_> = mime
+                .parameters()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v))
+                .collect();
+            vec.sort();
+            vec
+        }
+
+        self.type_().eq_ignore_ascii_case(other.type_())
+            && self.subtype().eq_ignore_ascii_case(other.subtype())
+            && self.parameters_len_max() == other.parameters_len_max()
+            && sorted_params(self) == sorted_params(other)
     }
 }
 
