@@ -4,9 +4,9 @@ use crate::rfc7231::{
     parse_parameter, unquote_string, ConstMime, Parser, Result,
 };
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::fmt;
 
-// FIXME should implement Ord and PartialOrd manually
 #[derive(Clone, Debug, Eq)]
 pub struct Mime<'a> {
     source: Source<'a>,
@@ -177,6 +177,46 @@ impl<'a> PartialEq for Mime<'a> {
             && self.subtype().eq_ignore_ascii_case(other.subtype())
             && self.parameters_len_max() == other.parameters_len_max()
             && sorted_params(self) == sorted_params(other)
+    }
+}
+
+impl<'a> Ord for Mime<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // FIXME can we do this without all the allocations?
+        fn sorted_params<'b>(mime: &'b Mime) -> Vec<(String, Cow<'b, str>)> {
+            let mut vec: Vec<_> = mime
+                .parameters()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v))
+                .collect();
+            vec.sort();
+            vec
+        }
+
+        match self
+            .type_()
+            .to_ascii_lowercase()
+            .cmp(&other.type_().to_ascii_lowercase())
+        {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+
+        match self
+            .subtype()
+            .to_ascii_lowercase()
+            .cmp(&other.subtype().to_ascii_lowercase())
+        {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+
+        sorted_params(self).cmp(&sorted_params(other))
+    }
+}
+
+impl PartialOrd for Mime<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
