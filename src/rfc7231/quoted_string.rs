@@ -140,35 +140,36 @@ pub fn unquote_string(input: &str) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::assert;
 
     #[test]
     fn quoted_string_boring() {
-        assert_eq!(unquote_string(""), "");
-        assert_eq!(unquote_string("abc"), "abc");
+        assert!(unquote_string("") == "");
+        assert!(unquote_string("abc") == "abc");
     }
 
     #[test]
     fn quoted_string_backslash_n() {
-        assert_eq!(unquote_string(r"\n"), "n");
+        assert!(unquote_string(r"\n") == "n");
     }
 
     #[test]
     fn quoted_string_backslash_quote() {
-        assert_eq!(unquote_string(r#"a\"b"#), r#"a"b"#);
+        assert!(unquote_string(r#"a\"b"#) == r#"a"b"#);
     }
 
     #[test]
     fn quoted_string_backslash_backslash() {
-        assert_eq!(unquote_string(r"a\\b"), r"a\b");
+        assert!(unquote_string(r"a\\b") == r"a\b");
     }
 
     #[test]
     fn quoted_string_complicated() {
-        assert_eq!(unquote_string(r#"\\\\\"a\\"#), r#"\\"a\"#);
+        assert!(unquote_string(r#"\\\\\"a\\"#) == r#"\\"a\"#);
     }
 
     #[test]
     fn quoted_string_unicode() {
-        assert_eq!(unquote_string(r"\🙂"), r"🙂");
+        assert!(unquote_string(r"\🙂") == r"🙂");
     }
 }

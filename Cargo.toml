@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 
 [dev-dependencies]
+assert2 = "0.3.6"
 criterion = { version = "0.*", default-features = false }
 quoted-string = "0.6.1"
 

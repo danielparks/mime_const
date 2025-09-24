@@ -2,6 +2,7 @@
 #![cfg(test)]
 
 use super::*;
+use assert2::assert;
 
 /// Test a parsing with the passed parser.
 macro_rules! assert_parse {
@@ -10,15 +11,15 @@ macro_rules! assert_parse {
         $parser:expr,
         Ok(Mime { slash: $slash:expr, plus: $plus:expr, end: $end:expr, .. })
     ) => {
-        assert_eq!(
-            $parser.parse_const($input),
-            Ok(ConstMime {
-                source: $input,
-                slash: $slash,
-                plus: $plus,
-                end: $end,
-                parameters: Parameters::None,
-            })
+        assert!(
+            $parser.parse_const($input)
+                == Ok(ConstMime {
+                    source: $input,
+                    slash: $slash,
+                    plus: $plus,
+                    end: $end,
+                    parameters: Parameters::None,
+                })
         );
     };
     (
@@ -32,19 +33,19 @@ macro_rules! assert_parse {
             ..
         })
     ) => {
-        assert_eq!(
-            $parser.parse_const($input),
-            Ok(ConstMime {
-                source: $input,
-                slash: $slash,
-                plus: $plus,
-                end: $end,
-                parameters: $parameters,
-            })
+        assert!(
+            $parser.parse_const($input)
+                == Ok(ConstMime {
+                    source: $input,
+                    slash: $slash,
+                    plus: $plus,
+                    end: $end,
+                    parameters: $parameters,
+                })
         );
     };
     ($input:expr, $parser:expr, Err($error:expr)) => {
-        assert_eq!($parser.parse_const($input), Err($error));
+        assert!($parser.parse_const($input) == Err($error));
     };
 }
 

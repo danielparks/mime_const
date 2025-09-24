@@ -164,14 +164,15 @@ impl fmt::Debug for Byte {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::assert;
 
     #[test]
     fn byte_a() {
-        assert_eq!(format!("{:?}", Byte(b'a')), "'a'".to_string());
+        assert!(format!("{:?}", Byte(b'a')) == "'a'".to_string());
     }
 
     #[test]
     fn byte_0() {
-        assert_eq!(format!("{:?}", Byte(0)), "'\\0'".to_string());
+        assert!(format!("{:?}", Byte(0)) == "'\\0'".to_string());
     }
 }
