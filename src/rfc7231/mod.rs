@@ -338,6 +338,7 @@ const fn parse_parameter_key_value(
 ///
 /// If the `usize` is larger than [`u16::MAX`].
 #[inline]
+#[allow(clippy::cast_possible_truncation)] // We check `src.len() < u16::MAX`
 const fn as_u16(i: usize) -> u16 {
     debug_assert!(i <= u16::MAX as usize, "as_u16 overflow");
     i as u16

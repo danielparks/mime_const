@@ -114,7 +114,7 @@ const STR_MIME_TEXT: StrMime =
 const STR_MIME_SVG: StrMime =
     StrMime { type_: "image", subtype: "svg+xml", suffix: Some("xml") };
 
-fn test_mime<M: Mime>(text: M, svg: M) {
+fn test_mime<M: Mime>(text: &M, svg: &M) {
     assert_eq!(black_box(text.type_()), "text");
     assert_eq!(black_box(text.subtype()), "plain");
     assert_eq!(black_box(text.suffix()), None);
@@ -136,27 +136,27 @@ fn benchmarks(c: &mut Criterion) {
 
     group.bench_function(
         BenchmarkId::new("u8", size_of_val(&INDEX_MIME_TEXT_U8)),
-        |b| b.iter(|| test_mime(INDEX_MIME_TEXT_U8, INDEX_MIME_SVG_U8)),
+        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_U8, &INDEX_MIME_SVG_U8)),
     );
     group.bench_function(
         BenchmarkId::new("u16", size_of_val(&INDEX_MIME_TEXT_U16)),
-        |b| b.iter(|| test_mime(INDEX_MIME_TEXT_U16, INDEX_MIME_SVG_U16)),
+        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_U16, &INDEX_MIME_SVG_U16)),
     );
     group.bench_function(
         BenchmarkId::new("usize", size_of_val(&INDEX_MIME_TEXT_USIZE)),
-        |b| b.iter(|| test_mime(INDEX_MIME_TEXT_USIZE, INDEX_MIME_SVG_USIZE)),
+        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_USIZE, &INDEX_MIME_SVG_USIZE)),
     );
     group.bench_function(
         BenchmarkId::new("str", size_of_val(&STR_MIME_TEXT)),
-        |b| b.iter(|| test_mime(STR_MIME_TEXT, STR_MIME_SVG)),
+        |b| b.iter(|| test_mime(&STR_MIME_TEXT, &STR_MIME_SVG)),
     );
     // Verify that benchmarks are working — this should take roughly twice as
     // long as the others.
     group.bench_function(BenchmarkId::new("control", 0), |b| {
         b.iter(|| {
-            test_mime(STR_MIME_TEXT, STR_MIME_SVG);
-            test_mime(INDEX_MIME_TEXT_USIZE, INDEX_MIME_SVG_USIZE);
-        })
+            test_mime(&STR_MIME_TEXT, &STR_MIME_SVG);
+            test_mime(&INDEX_MIME_TEXT_USIZE, &INDEX_MIME_SVG_USIZE);
+        });
     });
 
     group.finish();

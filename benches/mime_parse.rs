@@ -23,7 +23,7 @@ fn benchmarks(c: &mut Criterion) {
         .measurement_time(Duration::from_millis(100));
 
     group.bench_function("StrMime literal (text/plain)", |b| {
-        b.iter(|| StrMime::new("text", "plain", None, None, None))
+        b.iter(|| StrMime::new("text", "plain", None, None, None));
     });
 
     group.bench_function("StrMime literal (text/plain; charset=utf-8)", |b| {
@@ -35,23 +35,23 @@ fn benchmarks(c: &mut Criterion) {
                 Some(StrParameter::new("charset", "utf-8").unwrap()),
                 None,
             )
-        })
+        });
     });
 
     group.bench_function("StrMime literal (image/svg+xml)", |b| {
-        b.iter(|| StrMime::new("image", "svg+xml", Some("xml"), None, None))
+        b.iter(|| StrMime::new("image", "svg+xml", Some("xml"), None, None));
     });
 
     group.bench_function("parse text/plain", |b| {
-        b.iter(|| IndexMime::constant("text/plain"))
+        b.iter(|| IndexMime::constant("text/plain"));
     });
 
     group.bench_function("parse text/plain; charset=utf-8", |b| {
-        b.iter(|| IndexMime::constant("text/plain; charset=utf-8"))
+        b.iter(|| IndexMime::constant("text/plain; charset=utf-8"));
     });
 
     group.bench_function("parse image/svg+xml", |b| {
-        b.iter(|| IndexMime::constant("image/svg+xml"))
+        b.iter(|| IndexMime::constant("image/svg+xml"));
     });
 
     group.finish();

@@ -34,6 +34,7 @@ impl<'a> Mime<'a> {
     ///     );
     /// }
     /// ```
+    #[must_use]
     pub const fn constant(input: &'a str) -> Self {
         // Can’t use `try_constant()` because Self might be dropped.
         match Parser::type_parser().parse_const(input) {
@@ -100,20 +101,24 @@ impl<'a> Mime<'a> {
         )
     }
 
+    #[must_use]
     pub fn type_(&self) -> &str {
         &self.source.as_str()[0..self.slash.into()]
     }
 
+    #[must_use]
     pub fn subtype(&self) -> &str {
         &self.source.as_str()[usize::from(self.slash) + 1..self.end.into()]
     }
 
+    #[must_use]
     pub fn suffix(&self) -> Option<&str> {
         self.plus.map(|plus| {
             &self.source.as_str()[usize::from(plus) + 1..self.end.into()]
         })
     }
 
+    #[must_use]
     pub fn parameters(&'a self) -> ParameterIter<'a> {
         ParameterIter {
             source: &self.source,

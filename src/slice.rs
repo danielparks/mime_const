@@ -101,19 +101,23 @@ impl Mime {
         self
     }
 
+    #[must_use]
     pub const fn type_(&self) -> &str {
         self.type_
     }
 
+    #[must_use]
     pub const fn subtype(&self) -> &str {
         self.subtype
     }
 
+    #[must_use]
     pub const fn suffix(&self) -> Option<&str> {
         self.suffix
     }
 
-    pub fn parameters<'a>(&'a self) -> ParameterIter<'a> {
+    #[must_use]
+    pub fn parameters(&self) -> ParameterIter<'_> {
         ParameterIter { parameters: &self.parameters, index: 0 }
     }
 }
@@ -190,10 +194,12 @@ impl Parameter {
         }
     }
 
+    #[must_use]
     pub const fn name(&self) -> &str {
         self.name
     }
 
+    #[must_use]
     pub const fn value(&self) -> &str {
         self.value
     }

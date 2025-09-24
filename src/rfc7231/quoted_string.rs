@@ -106,7 +106,8 @@ pub(crate) const fn parse_quoted_string(
 /// The only uses for the backslash escape are quotes and backslashes.
 ///
 /// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
-pub fn unquote_string<'a>(input: &'a str) -> Cow<'a, str> {
+#[must_use]
+pub fn unquote_string(input: &str) -> Cow<'_, str> {
     if let Some(i) = input.find('\\') {
         // FIXME? This will probably over-allocate a bit.
         let mut output = String::with_capacity(input.len() - 1);
@@ -148,7 +149,7 @@ mod tests {
 
     #[test]
     fn quoted_string_backslash_n() {
-        assert_eq!(unquote_string(r#"\n"#), "n");
+        assert_eq!(unquote_string(r"\n"), "n");
     }
 
     #[test]
@@ -158,7 +159,7 @@ mod tests {
 
     #[test]
     fn quoted_string_backslash_backslash() {
-        assert_eq!(unquote_string(r#"a\\b"#), r#"a\b"#);
+        assert_eq!(unquote_string(r"a\\b"), r"a\b");
     }
 
     #[test]
@@ -168,6 +169,6 @@ mod tests {
 
     #[test]
     fn quoted_string_unicode() {
-        assert_eq!(unquote_string(r#"\🙂"#), r#"🙂"#);
+        assert_eq!(unquote_string(r"\🙂"), r"🙂");
     }
 }
