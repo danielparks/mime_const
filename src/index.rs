@@ -127,7 +127,7 @@ impl<'a> Mime<'a> {
     }
 }
 
-impl<'a> fmt::Display for Mime<'a> {
+impl fmt::Display for Mime<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.type_(), self.subtype())?;
         for (key, value) in self.parameters() {

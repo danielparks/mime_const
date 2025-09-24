@@ -1,41 +1,68 @@
 //! Test behavior of [`mime_const::index::Mime`].
 
 use mime_const::index::Mime;
-// use mime_const::rfc7231::ParseError;
 
 #[test]
-fn const_display_lowercase() {
+fn display_const_lowercase() {
     assert_eq!(
-        Mime::constant("text/plain; charset=utf-8").to_string(),
-        "text/plain; charset=utf-8"
+        Mime::try_constant("text/plain; charset=utf-8").map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned()),
     );
 }
 
 #[test]
-fn new_display_lowercase() {
+fn display_new_lowercase() {
     assert_eq!(
-        Mime::new("text/plain; charset=utf-8").unwrap().to_string(),
-        "text/plain; charset=utf-8"
+        Mime::new("text/plain; charset=utf-8").map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned())
     );
 }
 
-/*
-#[ignore = "no case support"]
 #[test]
-#[should_panic]
-fn const_display_uppercase() {
+fn display_const_mixed_case() {
     assert_eq!(
-        Mime::try_constant("TEXT/PLAIN; CHARSET=UTF-8"),
-        Err(ParseError::UppercaseType { pos: 0, byte: b'T' })
+        Mime::try_constant("Text/SGML; CharSet=UTF-8").map(|m| m.to_string()),
+        Ok("Text/SGML; CharSet=UTF-8".to_owned()),
     );
 }
-*/
 
-#[ignore = "no case support"]
 #[test]
-fn new_display_uppercase() {
+fn display_new_mixed_case() {
     assert_eq!(
-        Mime::new("TEXT/PLAIN; CHARSET=UTF-8").unwrap().to_string(),
-        "text/plain; charset=utf-8"
+        Mime::new("Text/SGML; CharSet=UTF-8").map(|m| m.to_string()),
+        Ok("Text/SGML; CharSet=UTF-8".to_owned())
+    );
+}
+
+#[test]
+fn display_const_extra_spaces() {
+    assert_eq!(
+        Mime::try_constant("text/plain  ;   charset=utf-8")
+            .map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned()),
+    );
+}
+
+#[test]
+fn display_new_extra_spaces() {
+    assert_eq!(
+        Mime::new("text/plain   ;  charset=utf-8").map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned())
+    );
+}
+
+#[test]
+fn display_const_no_spaces() {
+    assert_eq!(
+        Mime::try_constant("text/plain;charset=utf-8").map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned()),
+    );
+}
+
+#[test]
+fn display_new_no_spaces() {
+    assert_eq!(
+        Mime::new("text/plain;charset=utf-8").map(|m| m.to_string()),
+        Ok("text/plain; charset=utf-8".to_owned())
     );
 }
