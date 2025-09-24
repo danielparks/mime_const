@@ -4,6 +4,7 @@ use crate::rfc7231::{
     parse_parameter, unquote_string, ConstMime, Parser, Result,
 };
 use std::borrow::Cow;
+use std::fmt;
 
 // FIXME should implement Eq, PartialEq, Ord, and PartialOrd manually
 #[derive(Clone, Debug)]
@@ -123,6 +124,16 @@ impl<'a> Mime<'a> {
                 0
             },
         }
+    }
+}
+
+impl<'a> fmt::Display for Mime<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.type_(), self.subtype())?;
+        for (key, value) in self.parameters() {
+            write!(f, "; {}={}", key, value)?;
+        }
+        Ok(())
     }
 }
 
