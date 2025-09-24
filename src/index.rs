@@ -15,30 +15,6 @@ pub struct Mime<'a> {
     parameters: Parameters,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum Source<'a> {
-    Str(&'a str),
-    Owned(String),
-}
-
-impl<'a> Source<'a> {
-    /// Get the source as a byte slice.
-    fn as_bytes(&'a self) -> &'a [u8] {
-        match self {
-            Self::Str(src) => src.as_bytes(),
-            Self::Owned(src) => src.as_bytes(),
-        }
-    }
-
-    /// Get the source as a `&str`.
-    fn as_str(&'a self) -> &'a str {
-        match self {
-            Self::Str(src) => src,
-            Self::Owned(src) => src.as_str(),
-        }
-    }
-}
-
 impl<'a> Mime<'a> {
     /// Parse a media type at compile time or panic.
     ///
@@ -146,6 +122,30 @@ impl<'a> Mime<'a> {
             } else {
                 0
             },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Source<'a> {
+    Str(&'a str),
+    Owned(String),
+}
+
+impl<'a> Source<'a> {
+    /// Get the source as a byte slice.
+    fn as_bytes(&'a self) -> &'a [u8] {
+        match self {
+            Self::Str(src) => src.as_bytes(),
+            Self::Owned(src) => src.as_bytes(),
+        }
+    }
+
+    /// Get the source as a `&str`.
+    fn as_str(&'a self) -> &'a str {
+        match self {
+            Self::Str(src) => src,
+            Self::Owned(src) => src.as_str(),
         }
     }
 }
