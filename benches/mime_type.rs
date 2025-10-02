@@ -20,13 +20,13 @@ where
     end: T,
 }
 
-trait Mime {
-    fn type_(&self) -> &'static str;
-    fn subtype(&self) -> &'static str;
-    fn suffix(&self) -> Option<&'static str>;
+trait Mime<'a> {
+    fn type_(&'a self) -> &'a str;
+    fn subtype(&'a self) -> &'a str;
+    fn suffix(&'a self) -> Option<&'a str>;
 }
 
-impl<T> Mime for IndexMime<T>
+impl<T> Mime<'static> for IndexMime<T>
 where
     T: Into<usize> + From<u8> + Copy,
 {
@@ -50,7 +50,7 @@ struct StrMime {
     suffix: Option<&'static str>,
 }
 
-impl Mime for StrMime {
+impl Mime<'static> for StrMime {
     fn type_(&self) -> &'static str {
         self.type_
     }
@@ -114,7 +114,7 @@ const STR_MIME_TEXT: StrMime =
 const STR_MIME_SVG: StrMime =
     StrMime { type_: "image", subtype: "svg+xml", suffix: Some("xml") };
 
-fn test_mime<M: Mime>(text: &M, svg: &M) {
+fn test_mime<'a, M: Mime<'a>>(text: &'a M, svg: &'a M) {
     assert_eq!(black_box(text.type_()), "text");
     assert_eq!(black_box(text.subtype()), "plain");
     assert_eq!(black_box(text.suffix()), None);
