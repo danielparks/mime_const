@@ -7,8 +7,29 @@
 )]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use mime_const::index::Mime as CrateIndexMime;
 use std::hint::black_box;
 use std::time::Duration;
+
+trait Mime<'a> {
+    fn type_(&'a self) -> &'a str;
+    fn subtype(&'a self) -> &'a str;
+    fn suffix(&'a self) -> Option<&'a str>;
+}
+
+impl<'a> Mime<'a> for CrateIndexMime<'a> {
+    fn type_(&'a self) -> &'a str {
+        self.type_()
+    }
+
+    fn subtype(&'a self) -> &'a str {
+        self.subtype()
+    }
+
+    fn suffix(&'a self) -> Option<&'a str> {
+        self.suffix()
+    }
+}
 
 struct IndexMime<T>
 where
@@ -18,12 +39,6 @@ where
     slash: T,
     plus: Option<T>,
     end: T,
-}
-
-trait Mime<'a> {
-    fn type_(&'a self) -> &'a str;
-    fn subtype(&'a self) -> &'a str;
-    fn suffix(&'a self) -> Option<&'a str>;
 }
 
 impl<T> Mime<'static> for IndexMime<T>
@@ -63,6 +78,11 @@ impl Mime<'static> for StrMime {
         self.suffix
     }
 }
+
+const CRATE_INDEX_MIME_TEXT: CrateIndexMime =
+    CrateIndexMime::constant("text/plain; charset=utf-8");
+const CRATE_INDEX_MIME_SVG: CrateIndexMime =
+    CrateIndexMime::constant("image/svg+xml");
 
 const INDEX_MIME_TEXT_U8: IndexMime<u8> = IndexMime::<u8> {
     source: "text/plain; charset=utf-8",
@@ -149,6 +169,10 @@ fn benchmarks(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("str", size_of_val(&STR_MIME_TEXT)),
         |b| b.iter(|| test_mime(&STR_MIME_TEXT, &STR_MIME_SVG)),
+    );
+    group.bench_function(
+        BenchmarkId::new("crate::index", size_of_val(&CRATE_INDEX_MIME_TEXT)),
+        |b| b.iter(|| test_mime(&CRATE_INDEX_MIME_TEXT, &CRATE_INDEX_MIME_SVG)),
     );
     // Verify that benchmarks are working — this should take roughly twice as
     // long as the others.
