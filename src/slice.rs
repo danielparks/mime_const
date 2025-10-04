@@ -4,20 +4,86 @@ use crate::rfc7231::{is_valid_token_byte, is_valid_token_byte_not_plus};
 use std::fmt;
 use std::mem;
 
-pub struct Mime {
-    pub(crate) type_: &'static str,
-    pub(crate) subtype: &'static str,
-    pub(crate) suffix: Option<&'static str>,
-    pub(crate) parameters: Parameters,
+pub struct Mime<'a> {
+    pub(crate) type_: &'a str,
+    pub(crate) subtype: &'a str,
+    pub(crate) suffix: Option<&'a str>,
+    pub(crate) parameters: Parameters<'a>,
 }
 
-impl Mime {
+impl<'a> Mime<'a> {
+    pub const fn constant(
+        type_: &'a str,
+        subtype: &'a str,
+        suffix: Option<&'a str>,
+        parameter_1: Option<Parameter<'a>>,
+        parameter_2: Option<Parameter<'a>>,
+    ) -> Self {
+        // FIXME this is a copy and paste of `new()`.
+        if !validate_token(type_) {
+            panic!("InvalidType");
+        }
+
+        if let Some(suffix) = suffix {
+            let subtype = subtype.as_bytes();
+            let suffix = suffix.as_bytes();
+
+            if subtype.len() < suffix.len() {
+                panic!("InvalidSuffix");
+            }
+
+            let mut i = 0;
+            let plus = subtype.len() - suffix.len() - 1;
+            while i < plus {
+                if !is_valid_token_byte_not_plus(subtype[i]) {
+                    if subtype[i] == b'+' {
+                        panic!("SuffixNotAfterFirstPlus");
+                    } else {
+                        panic!("InvalidSubtype");
+                    }
+                }
+                i += 1;
+            }
+
+            if subtype[plus] != b'+' {
+                panic!("SuffixNotAfterFirstPlus");
+            }
+
+            // Check that the suffix is at the end of the subtype and validate.
+            i = plus + 1;
+            let mut suffix_i = 0;
+            while i < subtype.len() {
+                if subtype[i] != suffix[suffix_i] {
+                    panic!("SuffixNotEndOfSubtype");
+                } else if !is_valid_token_byte(subtype[i]) {
+                    panic!("InvalidSuffix");
+                }
+                i += 1;
+                suffix_i += 1;
+            }
+        } else {
+            // Subtype must not have a plus in it.
+            if !validate_token_no_plus(subtype) {
+                panic!("InvalidSubtype");
+            }
+        }
+
+        let parameters = match (parameter_1, parameter_2) {
+            (None, None) => Parameters::None,
+            (Some(one), None) => Parameters::One(one),
+            (None, Some(one)) => Parameters::One(one),
+            (Some(one), Some(two)) => Parameters::Two(one, two),
+        };
+
+        Self { type_, subtype, suffix, parameters }
+    }
+
     pub const fn new(
-        type_: &'static str,
-        subtype: &'static str,
-        suffix: Option<&'static str>,
-        parameter_1: Option<Parameter>,
-        parameter_2: Option<Parameter>,
+        type_: &'a str,
+        subtype: &'a str,
+        suffix: Option<&'a str>,
+        parameter_1: Option<Parameter<'a>>,
+        parameter_2: Option<Parameter<'a>>,
     ) -> Result<Self> {
         if !validate_token(type_) {
             return Err(Error::InvalidType);
@@ -32,7 +98,7 @@ impl Mime {
             }
 
             let mut i = 0;
-            let plus = subtype.len() - suffix.len();
+            let plus = subtype.len() - suffix.len() - 1;
             while i < plus {
                 if !is_valid_token_byte_not_plus(subtype[i]) {
                     if subtype[i] == b'+' {
@@ -77,11 +143,7 @@ impl Mime {
         Ok(Self { type_, subtype, suffix, parameters })
     }
 
-    pub fn with_parameter(
-        &mut self,
-        name: &'static str,
-        value: &'static str,
-    ) -> &Self {
+    pub fn with_parameter(&mut self, name: &'a str, value: &'a str) -> &Self {
         match mem::replace(&mut self.parameters, Parameters::None) {
             Parameters::None => {
                 self.parameters = Parameters::One(Parameter { name, value });
@@ -126,22 +188,22 @@ impl Mime {
 ///
 /// Instead, we validate the parameters and re-parse when need to access them.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum Parameters {
+pub(crate) enum Parameters<'a> {
     None,
-    One(Parameter),
-    Two(Parameter, Parameter),
+    One(Parameter<'a>),
+    Two(Parameter<'a>, Parameter<'a>),
     /// More than two.
-    Many(Vec<Parameter>),
+    Many(Vec<Parameter<'a>>),
 }
 
 /// Iterator over parameters.
 pub struct ParameterIter<'a> {
-    parameters: &'a Parameters,
+    parameters: &'a Parameters<'a>,
     index: usize,
 }
 
 impl<'a> Iterator for ParameterIter<'a> {
-    type Item = &'a Parameter;
+    type Item = &'a Parameter<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.parameters {
@@ -178,13 +240,24 @@ impl<'a> Iterator for ParameterIter<'a> {
 
 /// A single parameter in a MIME type, e.g. “charset=utf-8”.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Parameter {
-    pub(crate) name: &'static str,
-    pub(crate) value: &'static str,
+pub struct Parameter<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) value: &'a str,
 }
 
-impl Parameter {
-    pub const fn new(name: &'static str, value: &'static str) -> Result<Self> {
+impl<'a> Parameter<'a> {
+    pub const fn constant(name: &'a str, value: &'a str) -> Self {
+        // FIXME this is copy and paste of new
+        if !validate_token(name) {
+            panic!("InvalidParameterName");
+        } else if !validate_parameter_value(value) {
+            panic!("InvalidParameterValue");
+        } else {
+            Self { name, value }
+        }
+    }
+
+    pub const fn new(name: &'a str, value: &'a str) -> Result<Self> {
         if !validate_token(name) {
             Err(Error::InvalidParameterName)
         } else if !validate_parameter_value(value) {
@@ -195,12 +268,12 @@ impl Parameter {
     }
 
     #[must_use]
-    pub const fn name(&self) -> &str {
+    pub const fn name(&self) -> &'a str {
         self.name
     }
 
     #[must_use]
-    pub const fn value(&self) -> &str {
+    pub const fn value(&self) -> &'a str {
         self.value
     }
 }

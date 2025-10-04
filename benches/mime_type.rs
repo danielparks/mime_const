@@ -8,6 +8,7 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use mime_const::index::Mime as CrateIndexMime;
+use mime_const::slice::Mime as CrateSliceMime;
 use std::hint::black_box;
 use std::time::Duration;
 
@@ -18,6 +19,20 @@ trait Mime<'a> {
 }
 
 impl<'a> Mime<'a> for CrateIndexMime<'a> {
+    fn type_(&'a self) -> &'a str {
+        self.type_()
+    }
+
+    fn subtype(&'a self) -> &'a str {
+        self.subtype()
+    }
+
+    fn suffix(&'a self) -> Option<&'a str> {
+        self.suffix()
+    }
+}
+
+impl<'a> Mime<'a> for CrateSliceMime<'a> {
     fn type_(&'a self) -> &'a str {
         self.type_()
     }
@@ -83,6 +98,16 @@ const CRATE_INDEX_MIME_TEXT: CrateIndexMime =
     CrateIndexMime::constant("text/plain; charset=utf-8");
 const CRATE_INDEX_MIME_SVG: CrateIndexMime =
     CrateIndexMime::constant("image/svg+xml");
+
+const CRATE_SLICE_MIME_TEXT: CrateSliceMime = CrateSliceMime::constant(
+    "text",
+    "plain",
+    None,
+    Some(mime_const::slice::Parameter::constant("charset", "utf-8")),
+    None,
+);
+const CRATE_SLICE_MIME_SVG: CrateSliceMime =
+    CrateSliceMime::constant("image", "svg+xml", Some("xml"), None, None);
 
 const INDEX_MIME_TEXT_U8: IndexMime<u8> = IndexMime::<u8> {
     source: "text/plain; charset=utf-8",
@@ -173,6 +198,10 @@ fn benchmarks(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("crate::index", size_of_val(&CRATE_INDEX_MIME_TEXT)),
         |b| b.iter(|| test_mime(&CRATE_INDEX_MIME_TEXT, &CRATE_INDEX_MIME_SVG)),
+    );
+    group.bench_function(
+        BenchmarkId::new("crate::slice", size_of_val(&CRATE_SLICE_MIME_TEXT)),
+        |b| b.iter(|| test_mime(&CRATE_SLICE_MIME_TEXT, &CRATE_SLICE_MIME_SVG)),
     );
     // Verify that benchmarks are working — this should take roughly twice as
     // long as the others.
