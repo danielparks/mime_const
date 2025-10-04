@@ -12,6 +12,28 @@ pub struct Mime<'a> {
 }
 
 impl<'a> Mime<'a> {
+    /// Create a `Mime` or panic.
+    ///
+    /// ```rust
+    /// use mime_const::slice::{Mime, Parameter};
+    ///
+    /// const MARKDOWN: Mime = Mime::constant(
+    ///     "text",
+    ///     "markdown",
+    ///     None,
+    ///     Some(Parameter::constant("charset", "utf-8")),
+    ///     None,
+    /// );
+    ///
+    /// fn main() {
+    ///     assert_eq!(MARKDOWN.type_(), "text");
+    ///     assert_eq!(MARKDOWN.subtype(), "markdown");
+    ///     assert_eq!(
+    ///         MARKDOWN.parameters().next(),
+    ///         Some(&Parameter::constant("charset", "utf-8")),
+    ///     );
+    /// }
+    /// ```
     pub const fn constant(
         type_: &'a str,
         subtype: &'a str,
@@ -19,65 +41,28 @@ impl<'a> Mime<'a> {
         parameter_1: Option<Parameter<'a>>,
         parameter_2: Option<Parameter<'a>>,
     ) -> Self {
-        // FIXME this is a copy and paste of `new()`.
-        if !validate_token(type_) {
-            panic!("InvalidType");
-        }
-
-        if let Some(suffix) = suffix {
-            let subtype = subtype.as_bytes();
-            let suffix = suffix.as_bytes();
-
-            if subtype.len() < suffix.len() {
-                panic!("InvalidSuffix");
-            }
-
-            let mut i = 0;
-            let plus = subtype.len() - suffix.len() - 1;
-            while i < plus {
-                if !is_valid_token_byte_not_plus(subtype[i]) {
-                    if subtype[i] == b'+' {
-                        panic!("SuffixNotAfterFirstPlus");
-                    } else {
-                        panic!("InvalidSubtype");
-                    }
-                }
-                i += 1;
-            }
-
-            if subtype[plus] != b'+' {
-                panic!("SuffixNotAfterFirstPlus");
-            }
-
-            // Check that the suffix is at the end of the subtype and validate.
-            i = plus + 1;
-            let mut suffix_i = 0;
-            while i < subtype.len() {
-                if subtype[i] != suffix[suffix_i] {
-                    panic!("SuffixNotEndOfSubtype");
-                } else if !is_valid_token_byte(subtype[i]) {
-                    panic!("InvalidSuffix");
-                }
-                i += 1;
-                suffix_i += 1;
-            }
-        } else {
-            // Subtype must not have a plus in it.
-            if !validate_token_no_plus(subtype) {
-                panic!("InvalidSubtype");
+        match ConstMime::new(type_, subtype, suffix, parameter_1, parameter_2) {
+            Ok(mime) => Self::from_const(mime),
+            Err(error) => {
+                error.panic();
+                panic!("error.panic() did not panic");
             }
         }
-
-        let parameters = match (parameter_1, parameter_2) {
-            (None, None) => Parameters::None,
-            (Some(one), None) => Parameters::One(one),
-            (None, Some(one)) => Parameters::One(one),
-            (Some(one), Some(two)) => Parameters::Two(one, two),
-        };
-
-        Self { type_, subtype, suffix, parameters }
     }
 
+    /// Create a `Mime` or return an error.
+    ///
+    /// ```rust
+    /// use mime_const::slice::Mime;
+    ///
+    /// let mime = Mime::new("image", "svg+xml", Some("xml"), None, None)
+    ///     .unwrap();
+    ///
+    /// assert_eq!(mime.type_(), "image");
+    /// assert_eq!(mime.subtype(), "svg+xml");
+    /// assert_eq!(mime.suffix(), Some("xml"));
+    /// assert_eq!(mime.parameters().next(), None);
+    /// ```
     pub const fn new(
         type_: &'a str,
         subtype: &'a str,
@@ -85,62 +70,19 @@ impl<'a> Mime<'a> {
         parameter_1: Option<Parameter<'a>>,
         parameter_2: Option<Parameter<'a>>,
     ) -> Result<Self> {
-        if !validate_token(type_) {
-            return Err(Error::InvalidType);
+        match ConstMime::new(type_, subtype, suffix, parameter_1, parameter_2) {
+            Ok(mime) => Ok(Self::from_const(mime)),
+            Err(error) => Err(error),
         }
+    }
 
-        if let Some(suffix) = suffix {
-            let subtype = subtype.as_bytes();
-            let suffix = suffix.as_bytes();
-
-            if subtype.len() < suffix.len() {
-                return Err(Error::InvalidSuffix);
-            }
-
-            let mut i = 0;
-            let plus = subtype.len() - suffix.len() - 1;
-            while i < plus {
-                if !is_valid_token_byte_not_plus(subtype[i]) {
-                    if subtype[i] == b'+' {
-                        return Err(Error::SuffixNotAfterFirstPlus);
-                    } else {
-                        return Err(Error::InvalidSubtype);
-                    }
-                }
-                i += 1;
-            }
-
-            if subtype[plus] != b'+' {
-                return Err(Error::SuffixNotAfterFirstPlus);
-            }
-
-            // Check that the suffix is at the end of the subtype and validate.
-            i = plus + 1;
-            let mut suffix_i = 0;
-            while i < subtype.len() {
-                if subtype[i] != suffix[suffix_i] {
-                    return Err(Error::SuffixNotEndOfSubtype);
-                } else if !is_valid_token_byte(subtype[i]) {
-                    return Err(Error::InvalidSuffix);
-                }
-                i += 1;
-                suffix_i += 1;
-            }
-        } else {
-            // Subtype must not have a plus in it.
-            if !validate_token_no_plus(subtype) {
-                return Err(Error::InvalidSubtype);
-            }
-        }
-
-        let parameters = match (parameter_1, parameter_2) {
-            (None, None) => Parameters::None,
-            (Some(one), None) => Parameters::One(one),
-            (None, Some(one)) => Parameters::One(one),
-            (Some(one), Some(two)) => Parameters::Two(one, two),
-        };
-
-        Ok(Self { type_, subtype, suffix, parameters })
+    /// Convert `ConstMime` to `Mime`.
+    #[must_use]
+    #[inline]
+    const fn from_const(
+        ConstMime { type_, subtype, suffix, parameters }: ConstMime<'a>,
+    ) -> Self {
+        Self { type_, subtype, suffix, parameters: parameters.into_normal() }
     }
 
     pub fn with_parameter(&mut self, name: &'a str, value: &'a str) -> &Self {
@@ -185,8 +127,6 @@ impl<'a> Mime<'a> {
 }
 
 /// Parameters in a MIME type.
-///
-/// Instead, we validate the parameters and re-parse when need to access them.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum Parameters<'a> {
     None,
@@ -247,13 +187,12 @@ pub struct Parameter<'a> {
 
 impl<'a> Parameter<'a> {
     pub const fn constant(name: &'a str, value: &'a str) -> Self {
-        // FIXME this is copy and paste of new
-        if !validate_token(name) {
-            panic!("InvalidParameterName");
-        } else if !validate_parameter_value(value) {
-            panic!("InvalidParameterValue");
-        } else {
-            Self { name, value }
+        match Self::new(name, value) {
+            Ok(parameter) => parameter,
+            Err(error) => {
+                error.panic();
+                panic!("error.panic() did not panic");
+            }
         }
     }
 
@@ -275,6 +214,106 @@ impl<'a> Parameter<'a> {
     #[must_use]
     pub const fn value(&self) -> &'a str {
         self.value
+    }
+}
+
+/// Internal struct for working in const-context.
+///
+/// This can’t contain anything with `Drop`.
+struct ConstMime<'a> {
+    type_: &'a str,
+    subtype: &'a str,
+    suffix: Option<&'a str>,
+    parameters: ConstParameters<'a>,
+}
+
+impl<'a> ConstMime<'a> {
+    const fn new(
+        type_: &'a str,
+        subtype: &'a str,
+        suffix: Option<&'a str>,
+        parameter_1: Option<Parameter<'a>>,
+        parameter_2: Option<Parameter<'a>>,
+    ) -> Result<Self> {
+        if !validate_token(type_) {
+            return Err(Error::InvalidType);
+        }
+
+        if let Some(suffix) = suffix {
+            let subtype = subtype.as_bytes();
+            let suffix = suffix.as_bytes();
+
+            if subtype.len() < suffix.len() {
+                return Err(Error::InvalidSuffix);
+            }
+
+            let mut i = 0;
+            let plus = subtype.len() - suffix.len() - 1;
+            while i < plus {
+                if !is_valid_token_byte_not_plus(subtype[i]) {
+                    if subtype[i] == b'+' {
+                        return Err(Error::SuffixNotAfterFirstPlus);
+                    } else {
+                        return Err(Error::InvalidSubtype);
+                    }
+                }
+                i += 1;
+            }
+
+            if subtype[plus] != b'+' {
+                return Err(Error::SuffixNotAfterFirstPlus);
+            }
+
+            // Check that the suffix is at the end of the subtype and validate.
+            i = plus + 1;
+            let mut suffix_i = 0;
+            while i < subtype.len() {
+                if subtype[i] != suffix[suffix_i] {
+                    return Err(Error::SuffixNotEndOfSubtype);
+                } else if !is_valid_token_byte(subtype[i]) {
+                    return Err(Error::InvalidSuffix);
+                }
+                i += 1;
+                suffix_i += 1;
+            }
+        } else {
+            // Subtype must not have a plus in it.
+            if !validate_token_no_plus(subtype) {
+                return Err(Error::InvalidSubtype);
+            }
+        }
+
+        let parameters = match (parameter_1, parameter_2) {
+            (None, None) => ConstParameters::None,
+            (Some(one), None) => ConstParameters::One(one),
+            (None, Some(one)) => ConstParameters::One(one),
+            (Some(one), Some(two)) => ConstParameters::Two(one, two),
+        };
+
+        Ok(Self { type_, subtype, suffix, parameters })
+    }
+}
+
+/// Parameters in a MIME type.
+///
+/// This can’t contain anything with `Drop`.
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum ConstParameters<'a> {
+    None,
+    One(Parameter<'a>),
+    Two(Parameter<'a>, Parameter<'a>),
+}
+
+impl<'a> ConstParameters<'a> {
+    /// Convert `ConstParameters` to `Parameters`.
+    #[must_use]
+    #[inline]
+    const fn into_normal(self) -> Parameters<'a> {
+        match self {
+            Self::None => Parameters::None,
+            Self::One(one) => Parameters::One(one),
+            Self::Two(one, two) => Parameters::Two(one, two),
+        }
     }
 }
 
@@ -346,7 +385,7 @@ const fn validate_parameter_value(value: &str) -> bool {
 }
 
 /// An error encountered while parsing a media type.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     InvalidType,
     InvalidSubtype,
@@ -357,24 +396,41 @@ pub enum Error {
     InvalidParameterValue,
 }
 
+impl Error {
+    pub const fn message(&self) -> &'static str {
+        use Error::*;
+        match self {
+            InvalidType => "invalid type",
+            InvalidSubtype => "invalid subtype",
+            InvalidSuffix => "invalid suffix",
+            SuffixNotEndOfSubtype => "suffix does not end the subtype",
+            SuffixNotAfterFirstPlus => "suffix not immediately after first '+'",
+            InvalidParameterName => "invalid parameter name",
+            InvalidParameterValue => "invalid parameter value",
+        }
+    }
+
+    pub const fn panic(&self) {
+        use Error::*;
+        match self {
+            InvalidType => panic!("invalid type"),
+            InvalidSubtype => panic!("invalid subtype"),
+            InvalidSuffix => panic!("invalid suffix"),
+            SuffixNotEndOfSubtype => panic!("suffix does not end the subtype"),
+            SuffixNotAfterFirstPlus => {
+                panic!("suffix not immediately after first '+'")
+            }
+            InvalidParameterName => panic!("invalid parameter name"),
+            InvalidParameterValue => panic!("invalid parameter value"),
+        }
+    }
+}
+
 impl std::error::Error for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
-        match self {
-            InvalidType => f.write_str("invalid type"),
-            InvalidSubtype => f.write_str("invalid subtype"),
-            InvalidSuffix => f.write_str("invalid suffix"),
-            SuffixNotEndOfSubtype => {
-                f.write_str("suffix does not end the subtype")
-            }
-            SuffixNotAfterFirstPlus => {
-                f.write_str("suffix not immediately after first '+'")
-            }
-            InvalidParameterName => f.write_str("invalid parameter name"),
-            InvalidParameterValue => f.write_str("invalid parameter value"),
-        }
+        f.write_str(self.message())
     }
 }
 
