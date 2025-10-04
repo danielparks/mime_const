@@ -7,9 +7,8 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::index::Mime as IndexMime;
-use mime_const::slice::Mime as StrMime;
-use mime_const::slice::Parameter as StrParameter;
+use mime_const::index;
+use mime_const::slice;
 use std::time::Duration;
 
 fn benchmarks(c: &mut Criterion) {
@@ -22,36 +21,46 @@ fn benchmarks(c: &mut Criterion) {
         .warm_up_time(Duration::from_millis(10))
         .measurement_time(Duration::from_millis(100));
 
-    group.bench_function("StrMime literal (text/plain)", |b| {
-        b.iter(|| StrMime::new("text", "plain", None, None, None));
+    // No reason to benchmark the creation of `owned::Mime`; it’s created by
+    // converting from a `slice::Mime` for convenience.
+
+    group.bench_function("slice::Mime literal (text/plain)", |b| {
+        b.iter(|| slice::Mime::new("text", "plain", None, None, None).unwrap());
     });
 
-    group.bench_function("StrMime literal (text/plain; charset=utf-8)", |b| {
+    group.bench_function(
+        "slice::Mime literal (text/plain; charset=utf-8)",
+        |b| {
+            b.iter(|| {
+                slice::Mime::new(
+                    "text",
+                    "plain",
+                    None,
+                    Some(slice::Parameter::new("charset", "utf-8").unwrap()),
+                    None,
+                )
+                .unwrap()
+            });
+        },
+    );
+
+    group.bench_function("slice::Mime literal (image/svg+xml)", |b| {
         b.iter(|| {
-            StrMime::new(
-                "text",
-                "plain",
-                None,
-                Some(StrParameter::new("charset", "utf-8").unwrap()),
-                None,
-            )
+            slice::Mime::new("image", "svg+xml", Some("xml"), None, None)
+                .unwrap()
         });
     });
 
-    group.bench_function("StrMime literal (image/svg+xml)", |b| {
-        b.iter(|| StrMime::new("image", "svg+xml", Some("xml"), None, None));
+    group.bench_function("index::Mime parse text/plain", |b| {
+        b.iter(|| index::Mime::constant("text/plain"));
     });
 
-    group.bench_function("parse text/plain", |b| {
-        b.iter(|| IndexMime::constant("text/plain"));
+    group.bench_function("ndex::Mime parse text/plain; charset=utf-8", |b| {
+        b.iter(|| index::Mime::constant("text/plain; charset=utf-8"));
     });
 
-    group.bench_function("parse text/plain; charset=utf-8", |b| {
-        b.iter(|| IndexMime::constant("text/plain; charset=utf-8"));
-    });
-
-    group.bench_function("parse image/svg+xml", |b| {
-        b.iter(|| IndexMime::constant("image/svg+xml"));
+    group.bench_function("ndex::Mime parse image/svg+xml", |b| {
+        b.iter(|| index::Mime::constant("image/svg+xml"));
     });
 
     group.finish();

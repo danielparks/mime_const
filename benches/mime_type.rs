@@ -7,9 +7,9 @@
 )]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use mime_const::index::Mime as CrateIndexMime;
+use mime_const::index;
 use mime_const::owned;
-use mime_const::slice::Mime as CrateSliceMime;
+use mime_const::slice;
 use std::hint::black_box;
 use std::time::Duration;
 
@@ -19,7 +19,7 @@ trait Mime<'a> {
     fn suffix(&'a self) -> Option<&'a str>;
 }
 
-impl<'a> Mime<'a> for CrateIndexMime<'a> {
+impl<'a> Mime<'a> for index::Mime<'a> {
     fn type_(&'a self) -> &'a str {
         self.type_()
     }
@@ -33,7 +33,7 @@ impl<'a> Mime<'a> for CrateIndexMime<'a> {
     }
 }
 
-impl<'a> Mime<'a> for CrateSliceMime<'a> {
+impl<'a> Mime<'a> for slice::Mime<'a> {
     fn type_(&'a self) -> &'a str {
         self.type_()
     }
@@ -109,20 +109,20 @@ impl Mime<'static> for StrMime {
     }
 }
 
-const CRATE_INDEX_MIME_TEXT: CrateIndexMime =
-    CrateIndexMime::constant("text/plain; charset=utf-8");
-const CRATE_INDEX_MIME_SVG: CrateIndexMime =
-    CrateIndexMime::constant("image/svg+xml");
+const CRATE_INDEX_MIME_TEXT: index::Mime =
+    index::Mime::constant("text/plain; charset=utf-8");
+const CRATE_INDEX_MIME_SVG: index::Mime =
+    index::Mime::constant("image/svg+xml");
 
-const CRATE_SLICE_MIME_TEXT: CrateSliceMime = CrateSliceMime::constant(
+const CRATE_SLICE_MIME_TEXT: slice::Mime = slice::Mime::constant(
     "text",
     "plain",
     None,
     Some(mime_const::slice::Parameter::constant("charset", "utf-8")),
     None,
 );
-const CRATE_SLICE_MIME_SVG: CrateSliceMime =
-    CrateSliceMime::constant("image", "svg+xml", Some("xml"), None, None);
+const CRATE_SLICE_MIME_SVG: slice::Mime =
+    slice::Mime::constant("image", "svg+xml", Some("xml"), None, None);
 
 const INDEX_MIME_TEXT_U8: IndexMime<u8> = IndexMime::<u8> {
     source: "text/plain; charset=utf-8",
@@ -211,17 +211,17 @@ fn benchmarks(c: &mut Criterion) {
         |b| b.iter(|| test_mime(&STR_MIME_TEXT, &STR_MIME_SVG)),
     );
     group.bench_function(
-        BenchmarkId::new("crate::index", size_of_val(&CRATE_INDEX_MIME_TEXT)),
+        BenchmarkId::new("index::Mime", size_of_val(&CRATE_INDEX_MIME_TEXT)),
         |b| b.iter(|| test_mime(&CRATE_INDEX_MIME_TEXT, &CRATE_INDEX_MIME_SVG)),
     );
     group.bench_function(
-        BenchmarkId::new("crate::slice", size_of_val(&CRATE_SLICE_MIME_TEXT)),
+        BenchmarkId::new("slice::Mime", size_of_val(&CRATE_SLICE_MIME_TEXT)),
         |b| b.iter(|| test_mime(&CRATE_SLICE_MIME_TEXT, &CRATE_SLICE_MIME_SVG)),
     );
     let owned_mime_text: owned::Mime = CRATE_SLICE_MIME_TEXT.into();
     let owned_mime_svg: owned::Mime = CRATE_SLICE_MIME_SVG.into();
     group.bench_function(
-        BenchmarkId::new("crate::owned", size_of_val(&owned_mime_text)),
+        BenchmarkId::new("owned::Mime", size_of_val(&owned_mime_text)),
         |b| b.iter(|| test_mime(&owned_mime_text, &owned_mime_svg)),
     );
     // Verify that benchmarks are working — this should take roughly twice as
