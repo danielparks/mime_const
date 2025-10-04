@@ -10,5 +10,6 @@
 mod const_utils;
 
 pub mod index;
+pub mod owned;
 pub mod rfc7231;
 pub mod slice;

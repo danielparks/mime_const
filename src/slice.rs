@@ -318,7 +318,7 @@ impl<'a> ConstParameters<'a> {
 }
 
 #[inline]
-const fn validate_token(token: &str) -> bool {
+pub(crate) const fn validate_token(token: &str) -> bool {
     let mut i = 0;
     let bytes = token.as_bytes();
     while i < bytes.len() {
@@ -332,7 +332,7 @@ const fn validate_token(token: &str) -> bool {
 }
 
 #[inline]
-const fn validate_token_no_plus(token: &str) -> bool {
+pub(crate) const fn validate_token_no_plus(token: &str) -> bool {
     let mut i = 0;
     let bytes = token.as_bytes();
     while i < bytes.len() {
@@ -370,7 +370,7 @@ const fn validate_token_no_plus(token: &str) -> bool {
 ///
 /// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
 #[inline]
-const fn validate_parameter_value(value: &str) -> bool {
+pub(crate) const fn validate_parameter_value(value: &str) -> bool {
     let mut i = 0;
     let bytes = value.as_bytes();
     while i < bytes.len() {
