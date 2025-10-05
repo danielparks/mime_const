@@ -1,27 +1,31 @@
 # mime_const
 
-![Rust version 1.46+](https://img.shields.io/badge/Rust%20version-1.46%2B-success)
+![Rust version 1.57+](https://img.shields.io/badge/Rust%20version-1.57%2B-success)
 
 ```rust
 const MARKDOWN: MimeType = MimeType::constant("text/markdown; charset=utf-8");
 ```
 
-This is an experiment in parsing MIME/media types in `const` context. Presently
-this requires a minimum Rust version of 1.46 so we can use `if` and `match` in
-`const` context.
+This is an experiment in parsing MIME/media types in `const` context. It
+requires a minimum Rust version of 1.57 so we can `panic!` in`const` context.
 
 See [my comment on hyperium/mime issue #154][comment] for my thoughts on how
 this can be applied to the [mime] crate.
 
-### Panic kludge
+## Benchmarking
 
-This uses a horrible kludge to trigger a compile-time panic, since `panic!()` in
-`const` requires Rust 1.46.
+There are hard-to-read benchmark results for various implementation strategies
+at [`target/criterion/reports/index.html`].
 
-```rust
-#[allow(unconditional_panic, clippy::out_of_bounds_indexing)]
-let _: usize = [/*Error parsing MimeType*/][0];
-```
+The gist of the results:
+
+* Storing the parts of a MIME/media type as `&str` or `String` allows for the
+  fastest access to the components, e.g. the subtype. Storing the parts as
+  indices is roughly 30% slower.
+* Parsing to indices is about 30% slower than just passing the components as
+  individual `&str`s and then validating them.
+* Storing the indices as `u8` or `u16` gives marginally better parse and access
+  times than using `usize`.
 
 ## Other interesting crates
 
