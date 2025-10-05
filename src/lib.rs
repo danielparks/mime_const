@@ -8,6 +8,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod const_utils;
+mod index_t;
+
+pub use index_t::*;
 
 pub mod index;
 pub mod owned;

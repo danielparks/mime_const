@@ -7,8 +7,7 @@
 )]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use mime_const::index;
-use mime_const::slice;
+use mime_const::{index, index_u16, index_u8, index_usize, slice};
 use std::time::Duration;
 
 fn benchmarks(c: &mut Criterion) {
@@ -55,12 +54,57 @@ fn benchmarks(c: &mut Criterion) {
         b.iter(|| index::Mime::constant("text/plain"));
     });
 
-    group.bench_function("ndex::Mime parse text/plain; charset=utf-8", |b| {
+    group.bench_function("index::Mime parse text/plain; charset=utf-8", |b| {
         b.iter(|| index::Mime::constant("text/plain; charset=utf-8"));
     });
 
-    group.bench_function("ndex::Mime parse image/svg+xml", |b| {
+    group.bench_function("index::Mime parse image/svg+xml", |b| {
         b.iter(|| index::Mime::constant("image/svg+xml"));
+    });
+
+    group.bench_function("index_u8::Mime parse text/plain", |b| {
+        b.iter(|| index_u8::Mime::constant("text/plain"));
+    });
+
+    group.bench_function(
+        "index_u8::Mime parse text/plain; charset=utf-8",
+        |b| {
+            b.iter(|| index_u8::Mime::constant("text/plain; charset=utf-8"));
+        },
+    );
+
+    group.bench_function("index_u8::Mime parse image/svg+xml", |b| {
+        b.iter(|| index_u8::Mime::constant("image/svg+xml"));
+    });
+
+    group.bench_function("index_u16::Mime parse text/plain", |b| {
+        b.iter(|| index_u16::Mime::constant("text/plain"));
+    });
+
+    group.bench_function(
+        "index_u16::Mime parse text/plain; charset=utf-8",
+        |b| {
+            b.iter(|| index_u16::Mime::constant("text/plain; charset=utf-8"));
+        },
+    );
+
+    group.bench_function("index_u16::Mime parse image/svg+xml", |b| {
+        b.iter(|| index_u16::Mime::constant("image/svg+xml"));
+    });
+
+    group.bench_function("index_usize::Mime parse text/plain", |b| {
+        b.iter(|| index_usize::Mime::constant("text/plain"));
+    });
+
+    group.bench_function(
+        "index_usize::Mime parse text/plain; charset=utf-8",
+        |b| {
+            b.iter(|| index_usize::Mime::constant("text/plain; charset=utf-8"));
+        },
+    );
+
+    group.bench_function("index_usize::Mime parse image/svg+xml", |b| {
+        b.iter(|| index_usize::Mime::constant("image/svg+xml"));
     });
 
     group.finish();

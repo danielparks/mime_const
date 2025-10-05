@@ -12,13 +12,13 @@ macro_rules! assert_parse {
         Ok(Mime { slash: $slash:expr, plus: $plus:expr, end: $end:expr, .. })
     ) => {
         assert!(
-            $parser.parse_const($input)
+            $parser.parse_const($input, usize::MAX)
                 == Ok(ConstMime {
                     source: $input,
                     slash: $slash,
                     plus: $plus,
                     end: $end,
-                    parameters: Parameters::None,
+                    parameters: ConstParameters::None,
                 })
         );
     };
@@ -34,7 +34,7 @@ macro_rules! assert_parse {
         })
     ) => {
         assert!(
-            $parser.parse_const($input)
+            $parser.parse_const($input, usize::MAX)
                 == Ok(ConstMime {
                     source: $input,
                     slash: $slash,
@@ -45,7 +45,7 @@ macro_rules! assert_parse {
         );
     };
     ($input:expr, $parser:expr, Err($error:expr)) => {
-        assert!($parser.parse_const($input) == Err($error));
+        assert!($parser.parse_const($input, usize::MAX) == Err($error));
     };
 }
 
@@ -141,7 +141,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 8,
@@ -155,14 +155,14 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::Two(
-                Parameter {
+            parameters: ConstParameters::Two(
+                ConstParameter {
                     start: 5,
                     equal: 6,
                     end: 8,
                     quoted: false,
                 },
-                Parameter {
+                ConstParameter {
                     start: 9,
                     equal: 12,
                     end: 18,
@@ -177,7 +177,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::Many,
+            parameters: ConstParameters::Many,
             ..
         })
     }
@@ -186,7 +186,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::Many,
+            parameters: ConstParameters::Many,
             ..
         })
     }
@@ -195,7 +195,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 11,
                 equal: 12,
                 end: 14,
@@ -209,7 +209,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 10,
@@ -223,7 +223,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 13,
@@ -237,14 +237,14 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::Two(
-                Parameter {
+            parameters: ConstParameters::Two(
+                ConstParameter {
                     start: 5,
                     equal: 6,
                     end: 10,
                     quoted: true,
                 },
-                Parameter {
+                ConstParameter {
                     start: 13,
                     equal: 14,
                     end: 16,
@@ -259,7 +259,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 9,
@@ -273,7 +273,7 @@ tests_both! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 10,
@@ -339,7 +339,7 @@ tests_range! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 8,
@@ -353,7 +353,7 @@ tests_range! {
             slash: 1,
             plus: None,
             end: 3,
-            parameters: Parameters::One(Parameter {
+            parameters: ConstParameters::One(ConstParameter {
                 start: 5,
                 equal: 6,
                 end: 8,

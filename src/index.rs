@@ -1,7 +1,9 @@
 //! MIME/media type stored as a slice with indices to its parts.
+#![allow(clippy::manual_map)] // const
 
 use crate::rfc7231::{
-    parse_parameter, unquote_string, ConstMime, Parser, Result,
+    parse_parameter, unquote_string, ConstMime, ConstParameter,
+    ConstParameters, Parser, Result,
 };
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -37,14 +39,8 @@ impl<'a> Mime<'a> {
     #[must_use]
     pub const fn constant(input: &'a str) -> Self {
         // Can’t use `try_constant()` because Self might be dropped.
-        match Parser::type_parser().parse_const(input) {
-            Ok(ConstMime { source, slash, plus, end, parameters }) => Mime {
-                source: Source::Str(source),
-                slash,
-                plus,
-                end,
-                parameters,
-            },
+        match Parser::type_parser().parse_const(input, u16::MAX as usize) {
+            Ok(const_mime) => Self::from_const(const_mime),
             Err(error) => {
                 error.panic();
                 panic!("error.panic() did not panic");
@@ -63,16 +59,8 @@ impl<'a> Mime<'a> {
     /// assert_eq!(mime.parameters().next(), None);
     /// ```
     pub const fn try_constant(input: &'a str) -> Result<Self> {
-        match Parser::type_parser().parse_const(input) {
-            Ok(ConstMime { source, slash, plus, end, parameters }) => {
-                Ok(Mime {
-                    source: Source::Str(source),
-                    slash,
-                    plus,
-                    end,
-                    parameters,
-                })
-            }
+        match Parser::type_parser().parse_const(input, u16::MAX as usize) {
+            Ok(const_mime) => Ok(Self::from_const(const_mime)),
             Err(error) => Err(error),
         }
     }
@@ -89,16 +77,36 @@ impl<'a> Mime<'a> {
     /// ```
     pub fn new<S: Into<String>>(input: S) -> Result<Self> {
         let source = Source::Owned(input.into());
-        Parser::type_parser().parse_const(source.as_str()).map(
-            |ConstMime { source: _, slash, plus, end, parameters }| Mime {
-                // FIXME we can do this without clone.
-                source: source.clone(),
-                slash,
-                plus,
-                end,
-                parameters,
+        Parser::type_parser()
+            .parse_const(source.as_str(), u16::MAX as usize)
+            .map(
+                |ConstMime { source: _, slash, plus, end, parameters }| Self {
+                    source: source.clone(),
+                    slash: slash as _,
+                    plus: match plus {
+                        Some(plus) => Some(plus as _),
+                        None => None,
+                    },
+                    end: end as _,
+                    parameters: Parameters::from_const(parameters),
+                },
+            )
+    }
+
+    /// Convert [`ConstMime`] to [`Mime`].
+    const fn from_const(
+        ConstMime { source, slash, plus, end, parameters }: ConstMime<'a>,
+    ) -> Self {
+        Self {
+            source: Source::Str(source),
+            slash: slash as _,
+            plus: match plus {
+                Some(plus) => Some(plus as _),
+                None => None,
             },
-        )
+            end: end as _,
+            parameters: Parameters::from_const(parameters),
+        }
     }
 
     #[must_use]
@@ -260,11 +268,26 @@ pub(crate) enum Parameters {
     Many,
 }
 
+impl Parameters {
+    /// Convert [`ConstParameters`] to [`Parameters`].
+    const fn from_const(parameters: ConstParameters) -> Self {
+        match parameters {
+            ConstParameters::None => Self::None,
+            ConstParameters::One(one) => Self::One(Parameter::from_const(one)),
+            ConstParameters::Two(one, two) => Self::Two(
+                Parameter::from_const(one),
+                Parameter::from_const(two),
+            ),
+            ConstParameters::Many => Self::Many,
+        }
+    }
+}
+
 /// A single parameter in a MIME type, e.g. “charset=utf-8”.
 ///
-/// This only contains indices, so it’s useless without the [`Mime::source`].
+/// This only contains indices, so it’s useless without the [`Mime`].
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(crate) struct Parameter {
+pub struct Parameter {
     /// The index of the start of the parameter name.
     pub(crate) start: u16,
 
@@ -279,11 +302,18 @@ pub(crate) struct Parameter {
 }
 
 impl Parameter {
-    fn name<'a>(&self, src: &'a str) -> &'a str {
+    /// Convert [`ConstParameter`] to [`Parameter`].
+    const fn from_const(
+        ConstParameter { start, equal, end, quoted }: ConstParameter,
+    ) -> Self {
+        Self { start: start as _, equal: equal as _, end: end as _, quoted }
+    }
+
+    pub fn name<'a>(&self, src: &'a str) -> &'a str {
         &src[self.start.into()..self.equal.into()]
     }
 
-    fn value<'a>(&self, src: &'a str) -> Cow<'a, str> {
+    pub fn value<'a>(&self, src: &'a str) -> Cow<'a, str> {
         if self.quoted {
             // Strip quotes.
             unquote_string(
@@ -294,7 +324,7 @@ impl Parameter {
         }
     }
 
-    fn tuple<'a>(&self, src: &'a str) -> (&'a str, Cow<'a, str>) {
+    pub fn tuple<'a>(&self, src: &'a str) -> (&'a str, Cow<'a, str>) {
         (self.name(src), self.value(src))
     }
 }
@@ -335,7 +365,7 @@ impl<'a> Iterator for ParameterIter<'a> {
                 let parameter =
                     parse_parameter(self.source.as_bytes(), self.index)
                         .expect("parameters must be valid")?;
-                self.index = parameter.end.into();
+                self.index = parameter.end;
                 Some(parameter.tuple(self.source.as_str()))
             }
         }

@@ -84,7 +84,7 @@ pub use errors::*;
 pub use quoted_string::*;
 
 use crate::const_utils::get_byte;
-use crate::index::{Parameter, Parameters};
+use std::borrow::Cow;
 
 /// Replacement for the `?` postfix operator.
 ///
@@ -110,10 +110,63 @@ pub(crate) struct Parser {
 #[derive(Debug, PartialEq)]
 pub(crate) struct ConstMime<'a> {
     pub(crate) source: &'a str,
-    pub(crate) slash: u16,
-    pub(crate) plus: Option<u16>,
-    pub(crate) end: u16,
-    pub(crate) parameters: Parameters,
+    pub(crate) slash: usize,
+    pub(crate) plus: Option<usize>,
+    pub(crate) end: usize,
+    pub(crate) parameters: ConstParameters,
+}
+
+/// Parameters in a MIME type.
+///
+/// This can only store the parse information for two parameters because an
+/// arbitrary number of parameters would require a `Vec` and we can’t fill a
+/// `Vec` in a `const fn`.
+///
+/// Instead, we validate the parameters and re-parse when need to access them.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum ConstParameters {
+    None,
+    One(ConstParameter),
+    Two(ConstParameter, ConstParameter),
+    /// More than two.
+    Many,
+}
+
+/// A single parameter in a MIME type, e.g. “charset=utf-8”.
+///
+/// This only contains indices, so it’s useless without the [`ConstMime`].
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) struct ConstParameter {
+    /// The index of the start of the parameter name.
+    pub(crate) start: usize,
+
+    /// The index of the `'='`. The start of the value is `equal + 1`.
+    pub(crate) equal: usize,
+
+    /// The index just past the last character in the value.
+    pub(crate) end: usize,
+
+    /// Whether or not the value is a quoted string.
+    pub(crate) quoted: bool,
+}
+
+impl ConstParameter {
+    pub(crate) fn name<'a>(&self, src: &'a str) -> &'a str {
+        &src[self.start..self.equal]
+    }
+
+    pub(crate) fn value<'a>(&self, src: &'a str) -> Cow<'a, str> {
+        if self.quoted {
+            // Strip quotes.
+            unquote_string(&src[self.equal + 2..self.end - 1])
+        } else {
+            Cow::from(&src[self.equal + 1..self.end])
+        }
+    }
+
+    pub(crate) fn tuple<'a>(&self, src: &'a str) -> (&'a str, Cow<'a, str>) {
+        (self.name(src), self.value(src))
+    }
 }
 
 // FIXME how do we deal with case?
@@ -138,9 +191,10 @@ impl Parser {
     pub(crate) const fn parse_const<'a>(
         &self,
         source: &'a str,
+        max_len: usize,
     ) -> Result<ConstMime<'a>> {
         let bytes = source.as_bytes();
-        if bytes.len() > u16::MAX as usize {
+        if bytes.len() > max_len {
             return Err(ParseError::TooLong);
         }
 
@@ -156,9 +210,8 @@ impl Parser {
                 (3, 1, None)
             }
             [c, ..] if is_valid_token_byte(*c) => {
-                let i = try_!(self.consume_type(bytes));
-                let slash = as_u16(i);
-                let (i, plus) = try_!(self.consume_subtype(bytes, i));
+                let slash = try_!(self.consume_type(bytes));
+                let (i, plus) = try_!(self.consume_subtype(bytes, slash));
                 (i, slash, plus)
             }
             [c, ..] => {
@@ -166,9 +219,9 @@ impl Parser {
             }
         };
 
-        let end = as_u16(i);
+        let end = i;
 
-        let parameters = try_!(parse_parameters(bytes, i));
+        let parameters = try_!(parse_parameters(bytes, end));
         Ok(ConstMime { source, slash, plus, end, parameters })
     }
 
@@ -187,7 +240,7 @@ impl Parser {
         &self,
         bytes: &[u8],
         start: usize,
-    ) -> Result<(usize, Option<u16>)> {
+    ) -> Result<(usize, Option<usize>)> {
         // Validate first byte of subtype token.
         let mut i = start + 1;
         let mut plus = None;
@@ -196,7 +249,7 @@ impl Parser {
                 return Err(ParseError::MissingSubtype)
             }
             Some(b'+') => {
-                plus = Some(as_u16(i));
+                plus = Some(i);
             }
             Some(b'*') if self.accept_media_range => {
                 // * subtype; check next byte to make sure it’s either the end
@@ -222,7 +275,7 @@ impl Parser {
             match get_byte(bytes, i) {
                 None | Some(b';' | b' ' | b'\t') => return Ok((i, plus)),
                 Some(b'+') if matches!(plus, None) => {
-                    plus = Some(as_u16(i));
+                    plus = Some(i);
                 }
                 Some(c) if is_valid_token_byte(c) => (),
                 Some(c) => {
@@ -236,28 +289,31 @@ impl Parser {
 /// Parse parameters from `bytes` starting at `start`.
 ///
 /// Parameters look like `; key=value; key2=value2`.
-const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
+const fn parse_parameters(
+    bytes: &[u8],
+    start: usize,
+) -> Result<ConstParameters> {
     let one = match try_!(parse_parameter(bytes, start)) {
-        None => return Ok(Parameters::None),
+        None => return Ok(ConstParameters::None),
         Some(one) => one,
     };
 
     let two = match try_!(parse_parameter(bytes, one.end as usize)) {
-        None => return Ok(Parameters::One(one)),
+        None => return Ok(ConstParameters::One(one)),
         Some(two) => two,
     };
 
     let mut i = match try_!(parse_parameter(bytes, two.end as usize)) {
-        None => return Ok(Parameters::Two(one, two)),
-        Some(Parameter { end, .. }) => end as usize,
+        None => return Ok(ConstParameters::Two(one, two)),
+        Some(ConstParameter { end, .. }) => end,
     };
 
     // More than two parameters. Parse the remaining parameters to validate
     // them, but drop the results because we can’t store them.
     loop {
         i = match try_!(parse_parameter(bytes, i)) {
-            None => return Ok(Parameters::Many),
-            Some(Parameter { end, .. }) => end as usize,
+            None => return Ok(ConstParameters::Many),
+            Some(ConstParameter { end, .. }) => end,
         }
     }
 }
@@ -269,7 +325,7 @@ const fn parse_parameters(bytes: &[u8], start: usize) -> Result<Parameters> {
 pub(crate) const fn parse_parameter(
     bytes: &[u8],
     start: usize,
-) -> Result<Option<Parameter>> {
+) -> Result<Option<ConstParameter>> {
     match consume_whitespace(bytes, start) {
         None if start < bytes.len() => Err(ParseError::TrailingWhitespace),
         None => Ok(None),
@@ -287,7 +343,7 @@ pub(crate) const fn parse_parameter(
 const fn parse_parameter_key_value(
     bytes: &[u8],
     start: usize,
-) -> Result<Option<Parameter>> {
+) -> Result<Option<ConstParameter>> {
     match consume_token(bytes, start) {
         Some((i, b';')) if i == start => {
             Err(ParseError::MissingParameter { pos: i })
@@ -299,10 +355,10 @@ const fn parse_parameter_key_value(
             let end = match consume_token(bytes, equal + 1) {
                 Some((i, b'"')) if i == equal + 1 => {
                     let end = try_!(parse_quoted_string(bytes, i));
-                    return Ok(Some(Parameter {
-                        start: as_u16(start),
-                        equal: as_u16(equal),
-                        end: as_u16(end),
+                    return Ok(Some(ConstParameter {
+                        start,
+                        equal,
+                        end,
                         quoted: true,
                     }));
                 }
@@ -319,29 +375,12 @@ const fn parse_parameter_key_value(
             if end <= equal + 1 {
                 Err(ParseError::MissingParameterValue { pos: end })
             } else {
-                Ok(Some(Parameter {
-                    start: as_u16(start),
-                    equal: as_u16(equal),
-                    end: as_u16(end),
-                    quoted: false,
-                }))
+                Ok(Some(ConstParameter { start, equal, end, quoted: false }))
             }
         }
         Some((i, c)) => Err(ParseError::InvalidParameter { pos: i, byte: c }),
         None => Err(ParseError::MissingParameterEqual { pos: start }),
     }
-}
-
-/// Convert a `usize` to a `u16`.
-///
-/// # Panics
-///
-/// If the `usize` is larger than [`u16::MAX`].
-#[inline]
-#[allow(clippy::cast_possible_truncation)] // We check `src.len() < u16::MAX`
-const fn as_u16(i: usize) -> u16 {
-    debug_assert!(i <= u16::MAX as usize, "as_u16 overflow");
-    i as u16
 }
 
 /// Valid token characters are defined in [RFC7231 (HTTP)][RFC7231]:
