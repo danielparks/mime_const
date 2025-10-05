@@ -34,12 +34,12 @@ fn benchmarks(c: &mut Criterion) {
     ] {
         group.throughput(Throughput::Bytes(input.len().try_into().unwrap()));
         group.bench_with_input(
-            BenchmarkId::new("crate", input),
+            BenchmarkId::new("quoted_string::to_content", input),
             input,
             |b, input| b.iter(|| to_content::<TestSpec>(input).unwrap()),
         );
         group.bench_with_input(
-            BenchmarkId::new("unquote_string", input),
+            BenchmarkId::new("mime_const::unquote_string", input),
             &input[1..input.len() - 1], // Strip quotes
             |b, input| b.iter(|| unquote_string(input)),
         );
