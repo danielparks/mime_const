@@ -1,12 +1,14 @@
 //! MIME/media type stored as `String`s. This cannot be constructed in `const.
 
 use crate::slice;
+use std::borrow::Cow;
 
 /// A `Mime` that stores its parts in `String`s.
 ///
 /// ```rust
 /// use mime_const::slice;
 /// use mime_const::owned::Mime;
+/// use std::borrow::Cow;
 ///
 /// let mime: Mime = slice::Mime::new(
 ///     "image",
@@ -21,7 +23,10 @@ use crate::slice;
 /// assert_eq!(mime.type_(), "image");
 /// assert_eq!(mime.subtype(), "svg+xml");
 /// assert_eq!(mime.suffix(), Some("xml"));
-/// assert_eq!(Some(("charset", "utf-8")), mime.parameters().next());
+/// assert_eq!(
+///     mime.parameters().next(),
+///     Some(("charset", Cow::Borrowed("utf-8"))),
+/// );
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mime {
@@ -88,8 +93,8 @@ impl Parameter {
 
     #[must_use]
     #[inline]
-    pub fn tuple(&self) -> (&str, &str) {
-        (self.name(), self.value())
+    pub fn tuple(&self) -> (&str, Cow<'_, str>) {
+        (self.name(), Cow::Borrowed(self.value()))
     }
 }
 
@@ -99,7 +104,13 @@ impl From<(&str, &str)> for Parameter {
     }
 }
 
+impl From<(&str, Cow<'_, str>)> for Parameter {
+    fn from((name, value): (&str, Cow<'_, str>)) -> Self {
+        Self { name: name.to_owned(), value: value.into_owned() }
+    }
+}
+
 type ParameterIter<'a> = std::iter::Map<
     std::slice::Iter<'a, Parameter>,
-    for<'b> fn(&'b Parameter) -> (&'b str, &'b str),
+    for<'b> fn(&'b Parameter) -> (&'b str, Cow<'b, str>),
 >;

@@ -6,240 +6,101 @@
     missing_docs
 )]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+mod helpers;
+use helpers::{rough_parse, rough_parse_cow, test_rough_parse, BigTupleCow};
+
+use criterion::{
+    criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
+};
 use mime_const::{index, index_u16, index_u8, index_usize, owned, slice};
-use std::hint::black_box;
 use std::time::Duration;
 
 trait Mime<'a> {
-    fn type_(&'a self) -> &'a str;
-    fn subtype(&'a self) -> &'a str;
-    fn suffix(&'a self) -> Option<&'a str>;
+    fn parse(input: &'a str) -> Self;
+
+    fn big_tuple(&'a self) -> BigTupleCow<'a>;
 }
 
-impl<'a> Mime<'a> for index::Mime<'a> {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
-    }
+macro_rules! impl_mime {
+    ($lt:lifetime, $ty:ty) => {
+        impl<$lt> Mime<$lt> for $ty {
+            fn parse(input: &$lt str) -> Self {
+                Self::constant(input)
+            }
 
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
-    }
-}
-
-impl<'a> Mime<'a> for index_u8::Mime<'a> {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
-    }
-
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
+            fn big_tuple(&$lt self) -> BigTupleCow<$lt> {
+                let mut parameters = self.parameters();
+                (self.type_(), self.subtype(), self.suffix(), parameters.next(), parameters.next())
+            }
+        }
     }
 }
 
-impl<'a> Mime<'a> for index_u16::Mime<'a> {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
-    }
-
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
-    }
-}
-
-impl<'a> Mime<'a> for index_usize::Mime<'a> {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
-    }
-
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
-    }
-}
+impl_mime!('a, index::Mime<'a>);
+impl_mime!('a, index_u8::Mime<'a>);
+impl_mime!('a, index_u16::Mime<'a>);
+impl_mime!('a, index_usize::Mime<'a>);
 
 impl<'a> Mime<'a> for slice::Mime<'a> {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
+    fn parse(input: &'a str) -> Self {
+        let (typ, sub, suffix, param_1, param2) = rough_parse(input);
+        slice::Mime::constant(typ, sub, suffix, param_1, param2)
     }
 
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
+    fn big_tuple(&'a self) -> BigTupleCow<'a> {
+        let mut parameters = self.parameters();
+        (
+            self.type_(),
+            self.subtype(),
+            self.suffix(),
+            parameters.next(),
+            parameters.next(),
+        )
     }
 }
 
 impl<'a> Mime<'a> for owned::Mime {
-    fn type_(&'a self) -> &'a str {
-        self.type_()
+    fn parse(input: &'a str) -> Self {
+        <slice::Mime as Mime>::parse(input).into()
     }
 
-    fn subtype(&'a self) -> &'a str {
-        self.subtype()
-    }
-
-    fn suffix(&'a self) -> Option<&'a str> {
-        self.suffix()
-    }
-}
-
-struct IndexMime<T>
-where
-    T: Into<usize> + From<u8> + Copy,
-{
-    source: &'static str,
-    slash: T,
-    plus: Option<T>,
-    end: T,
-}
-
-impl<T> Mime<'static> for IndexMime<T>
-where
-    T: Into<usize> + From<u8> + Copy,
-{
-    fn type_(&self) -> &'static str {
-        &self.source[0..self.slash.into()]
-    }
-
-    fn subtype(&self) -> &'static str {
-        &self.source[self.slash.into() + 1..self.end.into()]
-    }
-
-    fn suffix(&self) -> Option<&'static str> {
-        self.plus
-            .map(|plus| &self.source[plus.into() + 1..self.end.into()])
+    fn big_tuple(&'a self) -> BigTupleCow<'a> {
+        let mut parameters = self.parameters();
+        (
+            self.type_(),
+            self.subtype(),
+            self.suffix(),
+            parameters.next(),
+            parameters.next(),
+        )
     }
 }
 
-struct StrMime {
-    type_: &'static str,
-    subtype: &'static str,
-    suffix: Option<&'static str>,
-}
-
-impl Mime<'static> for StrMime {
-    fn type_(&self) -> &'static str {
-        self.type_
-    }
-
-    fn subtype(&self) -> &'static str {
-        self.subtype
-    }
-
-    fn suffix(&self) -> Option<&'static str> {
-        self.suffix
-    }
-}
-
-const CRATE_INDEX_MIME_TEXT: index::Mime =
-    index::Mime::constant("text/plain; charset=utf-8");
-const CRATE_INDEX_MIME_SVG: index::Mime =
-    index::Mime::constant("image/svg+xml");
-
-const CRATE_INDEX_U8_MIME_TEXT: index_u8::Mime =
-    index_u8::Mime::constant("text/plain; charset=utf-8");
-const CRATE_INDEX_U8_MIME_SVG: index_u8::Mime =
-    index_u8::Mime::constant("image/svg+xml");
-
-const CRATE_INDEX_U16_MIME_TEXT: index_u16::Mime =
-    index_u16::Mime::constant("text/plain; charset=utf-16");
-const CRATE_INDEX_U16_MIME_SVG: index_u16::Mime =
-    index_u16::Mime::constant("image/svg+xml");
-
-const CRATE_INDEX_USIZE_MIME_TEXT: index_usize::Mime =
-    index_usize::Mime::constant("text/plain; charset=utf-size");
-const CRATE_INDEX_USIZE_MIME_SVG: index_usize::Mime =
-    index_usize::Mime::constant("image/svg+xml");
-
-const CRATE_SLICE_MIME_TEXT: slice::Mime = slice::Mime::constant(
-    "text",
-    "plain",
-    None,
-    Some(("charset", "utf-8")),
-    None,
-);
-const CRATE_SLICE_MIME_SVG: slice::Mime =
-    slice::Mime::constant("image", "svg+xml", Some("xml"), None, None);
-
-const INDEX_MIME_TEXT_U8: IndexMime<u8> = IndexMime::<u8> {
-    source: "text/plain; charset=utf-8",
-    slash: 4,
-    plus: None,
-    end: 10,
-};
-
-const INDEX_MIME_TEXT_U16: IndexMime<u16> = IndexMime::<u16> {
-    source: "text/plain; charset=utf-8",
-    slash: 4,
-    plus: None,
-    end: 10,
-};
-
-const INDEX_MIME_TEXT_USIZE: IndexMime<usize> = IndexMime::<usize> {
-    source: "text/plain; charset=utf-8",
-    slash: 4,
-    plus: None,
-    end: 10,
-};
-
-const INDEX_MIME_SVG_U8: IndexMime<u8> = IndexMime::<u8> {
-    source: "image/svg+xml",
-    slash: 5,
-    plus: Some(9),
-    end: 13,
-};
-
-const INDEX_MIME_SVG_U16: IndexMime<u16> = IndexMime::<u16> {
-    source: "image/svg+xml",
-    slash: 5,
-    plus: Some(9),
-    end: 13,
-};
-
-const INDEX_MIME_SVG_USIZE: IndexMime<usize> = IndexMime::<usize> {
-    source: "image/svg+xml",
-    slash: 5,
-    plus: Some(9),
-    end: 13,
-};
-
-/// `text/plain`
-const STR_MIME_TEXT: StrMime =
-    StrMime { type_: "text", subtype: "plain", suffix: None };
-
-/// `image/svg+xml`
-const STR_MIME_SVG: StrMime =
-    StrMime { type_: "image", subtype: "svg+xml", suffix: Some("xml") };
-
-fn test_mime<'a, M: Mime<'a>>(text: &'a M, svg: &'a M) {
-    assert_eq!(black_box(text.type_()), "text");
-    assert_eq!(black_box(text.subtype()), "plain");
-    assert_eq!(black_box(text.suffix()), None);
-
-    assert_eq!(black_box(svg.type_()), "image");
-    assert_eq!(black_box(svg.subtype()), "svg+xml");
-    assert_eq!(black_box(svg.suffix()), Some("xml"));
+macro_rules! bench {
+    ($group:expr, $input:expr, $ty:ty) => {
+        let input = $input;
+        $group.bench_with_input(
+            BenchmarkId::new(
+                format!("{} ({}B)", stringify!($ty), size_of::<$ty>()),
+                input,
+            ),
+            &input,
+            |b, input| {
+                let expected = rough_parse_cow(input);
+                let mime: $ty = <$ty as Mime>::parse(input);
+                b.iter(|| {
+                    let parts = mime.big_tuple();
+                    assert_eq!(parts, expected);
+                    parts
+                })
+            },
+        );
+    };
 }
 
 fn benchmarks(c: &mut Criterion) {
+    test_rough_parse();
+
     let mut group = c.benchmark_group("mime_type");
     group
         .noise_threshold(0.10)
@@ -249,80 +110,15 @@ fn benchmarks(c: &mut Criterion) {
         .warm_up_time(Duration::from_millis(10))
         .measurement_time(Duration::from_millis(100));
 
-    group.bench_function(
-        BenchmarkId::new("u8", size_of_val(&INDEX_MIME_TEXT_U8)),
-        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_U8, &INDEX_MIME_SVG_U8)),
-    );
-    group.bench_function(
-        BenchmarkId::new("u16", size_of_val(&INDEX_MIME_TEXT_U16)),
-        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_U16, &INDEX_MIME_SVG_U16)),
-    );
-    group.bench_function(
-        BenchmarkId::new("usize", size_of_val(&INDEX_MIME_TEXT_USIZE)),
-        |b| b.iter(|| test_mime(&INDEX_MIME_TEXT_USIZE, &INDEX_MIME_SVG_USIZE)),
-    );
-    group.bench_function(
-        BenchmarkId::new("str", size_of_val(&STR_MIME_TEXT)),
-        |b| b.iter(|| test_mime(&STR_MIME_TEXT, &STR_MIME_SVG)),
-    );
-    group.bench_function(
-        BenchmarkId::new("index::Mime", size_of_val(&CRATE_INDEX_MIME_TEXT)),
-        |b| b.iter(|| test_mime(&CRATE_INDEX_MIME_TEXT, &CRATE_INDEX_MIME_SVG)),
-    );
-    group.bench_function(
-        BenchmarkId::new(
-            "index_u8::Mime",
-            size_of_val(&CRATE_INDEX_U8_MIME_TEXT),
-        ),
-        |b| {
-            b.iter(|| {
-                test_mime(&CRATE_INDEX_U8_MIME_TEXT, &CRATE_INDEX_U8_MIME_SVG)
-            })
-        },
-    );
-    group.bench_function(
-        BenchmarkId::new(
-            "index_u16::Mime",
-            size_of_val(&CRATE_INDEX_U16_MIME_TEXT),
-        ),
-        |b| {
-            b.iter(|| {
-                test_mime(&CRATE_INDEX_U16_MIME_TEXT, &CRATE_INDEX_U16_MIME_SVG)
-            })
-        },
-    );
-    group.bench_function(
-        BenchmarkId::new(
-            "index_usize::Mime",
-            size_of_val(&CRATE_INDEX_USIZE_MIME_TEXT),
-        ),
-        |b| {
-            b.iter(|| {
-                test_mime(
-                    &CRATE_INDEX_USIZE_MIME_TEXT,
-                    &CRATE_INDEX_USIZE_MIME_SVG,
-                )
-            })
-        },
-    );
-    group.bench_function(
-        BenchmarkId::new("slice::Mime", size_of_val(&CRATE_SLICE_MIME_TEXT)),
-        |b| b.iter(|| test_mime(&CRATE_SLICE_MIME_TEXT, &CRATE_SLICE_MIME_SVG)),
-    );
-    let owned_mime_text: owned::Mime = CRATE_SLICE_MIME_TEXT.into();
-    let owned_mime_svg: owned::Mime = CRATE_SLICE_MIME_SVG.into();
-    group.bench_function(
-        BenchmarkId::new("owned::Mime", size_of_val(&owned_mime_text)),
-        |b| b.iter(|| test_mime(&owned_mime_text, &owned_mime_svg)),
-    );
-    // Verify that benchmarks are working — this should take roughly twice as
-    // long as the others.
-    group.bench_function(BenchmarkId::new("control", 0), |b| {
-        b.iter(|| {
-            test_mime(&STR_MIME_TEXT, &STR_MIME_SVG);
-            test_mime(&INDEX_MIME_TEXT_USIZE, &INDEX_MIME_SVG_USIZE);
-        });
-    });
+    for input in ["text/plain", "text/plain; charset=utf-8", "image/svg+xml"] {
+        group.throughput(Throughput::Bytes(input.len().try_into().unwrap()));
+        bench!(&mut group, input, index::Mime);
+        bench!(&mut group, input, index_u8::Mime);
+        bench!(&mut group, input, index_u16::Mime);
+        bench!(&mut group, input, index_usize::Mime);
+        bench!(&mut group, input, slice::Mime);
+        bench!(&mut group, input, owned::Mime);
+    }
 
     group.finish();
 }

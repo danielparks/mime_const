@@ -1,6 +1,7 @@
 //! MIME/media type stored as slices.
 
 use crate::rfc7231::{is_valid_token_byte, is_valid_token_byte_not_plus};
+use std::borrow::Cow;
 use std::fmt;
 use std::mem;
 
@@ -31,6 +32,7 @@ impl<'a> Mime<'a> {
     ///
     /// ```rust
     /// use mime_const::slice::{Mime, Parameter};
+    /// use std::borrow::Cow;
     ///
     /// const MARKDOWN: Mime = Mime::constant(
     ///     "text",
@@ -45,7 +47,7 @@ impl<'a> Mime<'a> {
     ///     assert_eq!(MARKDOWN.subtype(), "markdown");
     ///     assert_eq!(
     ///         MARKDOWN.parameters().next(),
-    ///         Some(("charset", "utf-8")),
+    ///         Some(("charset", Cow::Borrowed("utf-8"))),
     ///     );
     /// }
     /// ```
@@ -158,7 +160,7 @@ pub struct ParameterIter<'a> {
 }
 
 impl<'a> Iterator for ParameterIter<'a> {
-    type Item = (&'a str, &'a str);
+    type Item = (&'a str, Cow<'a, str>);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.parameters {
@@ -236,8 +238,8 @@ impl<'a> Parameter<'a> {
 
     #[must_use]
     #[inline]
-    pub const fn tuple(&self) -> (&'a str, &'a str) {
-        (self.name, self.value)
+    pub const fn tuple(&self) -> (&'a str, Cow<'a, str>) {
+        (self.name, Cow::Borrowed(self.value))
     }
 }
 
