@@ -4,6 +4,21 @@ use crate::rfc7231::{is_valid_token_byte, is_valid_token_byte_not_plus};
 use std::fmt;
 use std::mem;
 
+/// Replacement for the `?` postfix operator.
+///
+/// Can‘t be made `pub(crate)`, so it’s here instead of in `crate::const_utils`.
+///
+/// `?` doesn’t work in `const` because it invokes
+/// [`std::convert::Into::into()`], which is not `const`.
+macro_rules! try_ {
+    ($value:expr) => {
+        match $value {
+            Ok(value) => value,
+            Err(error) => return Err(error),
+        }
+    };
+}
+
 pub struct Mime<'a> {
     pub(crate) type_: &'a str,
     pub(crate) subtype: &'a str,
@@ -21,7 +36,7 @@ impl<'a> Mime<'a> {
     ///     "text",
     ///     "markdown",
     ///     None,
-    ///     Some(Parameter::constant("charset", "utf-8")),
+    ///     Some(("charset", "utf-8")),
     ///     None,
     /// );
     ///
@@ -30,7 +45,7 @@ impl<'a> Mime<'a> {
     ///     assert_eq!(MARKDOWN.subtype(), "markdown");
     ///     assert_eq!(
     ///         MARKDOWN.parameters().next(),
-    ///         Some(&Parameter::constant("charset", "utf-8")),
+    ///         Some(("charset", "utf-8")),
     ///     );
     /// }
     /// ```
@@ -38,8 +53,8 @@ impl<'a> Mime<'a> {
         type_: &'a str,
         subtype: &'a str,
         suffix: Option<&'a str>,
-        parameter_1: Option<Parameter<'a>>,
-        parameter_2: Option<Parameter<'a>>,
+        parameter_1: Option<(&'a str, &'a str)>,
+        parameter_2: Option<(&'a str, &'a str)>,
     ) -> Self {
         match ConstMime::new(type_, subtype, suffix, parameter_1, parameter_2) {
             Ok(mime) => Self::from_const(mime),
@@ -67,8 +82,8 @@ impl<'a> Mime<'a> {
         type_: &'a str,
         subtype: &'a str,
         suffix: Option<&'a str>,
-        parameter_1: Option<Parameter<'a>>,
-        parameter_2: Option<Parameter<'a>>,
+        parameter_1: Option<(&'a str, &'a str)>,
+        parameter_2: Option<(&'a str, &'a str)>,
     ) -> Result<Self> {
         match ConstMime::new(type_, subtype, suffix, parameter_1, parameter_2) {
             Ok(mime) => Ok(Self::from_const(mime)),
@@ -143,7 +158,7 @@ pub struct ParameterIter<'a> {
 }
 
 impl<'a> Iterator for ParameterIter<'a> {
-    type Item = &'a Parameter<'a>;
+    type Item = (&'a str, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.parameters {
@@ -151,7 +166,7 @@ impl<'a> Iterator for ParameterIter<'a> {
             Parameters::One(one) => {
                 if self.index == 0 {
                     self.index += 1;
-                    Some(one)
+                    Some(one.tuple())
                 } else {
                     None
                 }
@@ -159,10 +174,10 @@ impl<'a> Iterator for ParameterIter<'a> {
             Parameters::Two(one, two) => {
                 if self.index == 0 {
                     self.index += 1;
-                    Some(one)
+                    Some(one.tuple())
                 } else if self.index == 1 {
                     self.index += 1;
-                    Some(two)
+                    Some(two.tuple())
                 } else {
                     None
                 }
@@ -170,7 +185,7 @@ impl<'a> Iterator for ParameterIter<'a> {
             Parameters::Many(vec) => match vec.get(self.index) {
                 Some(parameter) => {
                     self.index += 1;
-                    Some(parameter)
+                    Some(parameter.tuple())
                 }
                 None => None,
             },
@@ -186,8 +201,9 @@ pub struct Parameter<'a> {
 }
 
 impl<'a> Parameter<'a> {
-    pub const fn constant(name: &'a str, value: &'a str) -> Self {
-        match Self::new(name, value) {
+    #[must_use]
+    pub const fn constant(name_value: (&'a str, &'a str)) -> Self {
+        match Self::new(name_value) {
             Ok(parameter) => parameter,
             Err(error) => {
                 error.panic();
@@ -196,7 +212,7 @@ impl<'a> Parameter<'a> {
         }
     }
 
-    pub const fn new(name: &'a str, value: &'a str) -> Result<Self> {
+    pub const fn new((name, value): (&'a str, &'a str)) -> Result<Self> {
         if !validate_token(name) {
             Err(Error::InvalidParameterName)
         } else if !validate_parameter_value(value) {
@@ -207,13 +223,21 @@ impl<'a> Parameter<'a> {
     }
 
     #[must_use]
+    #[inline]
     pub const fn name(&self) -> &'a str {
         self.name
     }
 
     #[must_use]
+    #[inline]
     pub const fn value(&self) -> &'a str {
         self.value
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn tuple(&self) -> (&'a str, &'a str) {
+        (self.name, self.value)
     }
 }
 
@@ -232,8 +256,8 @@ impl<'a> ConstMime<'a> {
         type_: &'a str,
         subtype: &'a str,
         suffix: Option<&'a str>,
-        parameter_1: Option<Parameter<'a>>,
-        parameter_2: Option<Parameter<'a>>,
+        parameter_1: Option<(&'a str, &'a str)>,
+        parameter_2: Option<(&'a str, &'a str)>,
     ) -> Result<Self> {
         if !validate_token(type_) {
             return Err(Error::InvalidType);
@@ -285,9 +309,16 @@ impl<'a> ConstMime<'a> {
 
         let parameters = match (parameter_1, parameter_2) {
             (None, None) => ConstParameters::None,
-            (Some(one), None) => ConstParameters::One(one),
-            (None, Some(one)) => ConstParameters::One(one),
-            (Some(one), Some(two)) => ConstParameters::Two(one, two),
+            (Some(one), None) => {
+                ConstParameters::One(try_!(Parameter::new(one)))
+            }
+            (None, Some(one)) => {
+                ConstParameters::One(try_!(Parameter::new(one)))
+            }
+            (Some(one), Some(two)) => ConstParameters::Two(
+                try_!(Parameter::new(one)),
+                try_!(Parameter::new(two)),
+            ),
         };
 
         Ok(Self { type_, subtype, suffix, parameters })

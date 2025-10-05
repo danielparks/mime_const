@@ -12,7 +12,7 @@ use crate::slice;
 ///     "image",
 ///     "svg+xml",
 ///     Some("xml"),
-///     Some(slice::Parameter::new("charset", "utf-8").unwrap()),
+///     Some(("charset", "utf-8")),
 ///     None,
 /// )
 /// .unwrap()
@@ -21,9 +21,7 @@ use crate::slice;
 /// assert_eq!(mime.type_(), "image");
 /// assert_eq!(mime.subtype(), "svg+xml");
 /// assert_eq!(mime.suffix(), Some("xml"));
-/// let one = mime.parameters().next().unwrap();
-/// assert_eq!(one.name(), "charset");
-/// assert_eq!(one.value(), "utf-8");
+/// assert_eq!(Some(("charset", "utf-8")), mime.parameters().next());
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mime {
@@ -50,8 +48,8 @@ impl Mime {
             .map(|suffix| &self.subtype[usize::from(suffix)..])
     }
 
-    pub fn parameters(&self) -> std::slice::Iter<'_, Parameter> {
-        self.parameters.iter()
+    pub fn parameters(&self) -> ParameterIter<'_> {
+        self.parameters.iter().map(Parameter::tuple)
     }
 }
 
@@ -77,18 +75,31 @@ pub struct Parameter {
 
 impl Parameter {
     #[must_use]
+    #[inline]
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
     #[must_use]
+    #[inline]
     pub fn value(&self) -> &str {
         self.value.as_str()
     }
-}
 
-impl From<&slice::Parameter<'_>> for Parameter {
-    fn from(other: &slice::Parameter<'_>) -> Self {
-        Self { name: other.name.to_owned(), value: other.value.to_owned() }
+    #[must_use]
+    #[inline]
+    pub fn tuple(&self) -> (&str, &str) {
+        (self.name(), self.value())
     }
 }
+
+impl From<(&str, &str)> for Parameter {
+    fn from((name, value): (&str, &str)) -> Self {
+        Self { name: name.to_owned(), value: value.to_owned() }
+    }
+}
+
+type ParameterIter<'a> = std::iter::Map<
+    std::slice::Iter<'a, Parameter>,
+    for<'b> fn(&'b Parameter) -> (&'b str, &'b str),
+>;

@@ -173,7 +173,7 @@ const CRATE_SLICE_MIME_TEXT: slice::Mime = slice::Mime::constant(
     "text",
     "plain",
     None,
-    Some(mime_const::slice::Parameter::constant("charset", "utf-8")),
+    Some(("charset", "utf-8")),
     None,
 );
 const CRATE_SLICE_MIME_SVG: slice::Mime =
