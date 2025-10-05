@@ -15,7 +15,7 @@ this can be applied to the [mime] crate.
 ## Benchmarking
 
 There are hard-to-read benchmark results for various implementation strategies
-at [`target/criterion/reports/index.html`].
+in HTML format in [`target/criterion/reports/`](target/criterion/reports/).
 
 The gist of the results:
 
