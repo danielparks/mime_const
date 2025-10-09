@@ -12,6 +12,7 @@ mod index_t;
 
 pub use index_t::*;
 
+pub mod bitfilter;
 pub mod index;
 pub mod owned;
 pub mod rfc7231;
