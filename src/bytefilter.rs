@@ -1,11 +1,11 @@
-//! Filter ASCII characters against a bit filter.
+//! Filter ASCII characters against a byte filter.
 //!
 //! Used to quickly determine if characters in a string are an valid.
 //!
 //! ```
-//! use mime_const::bitfilter::BitFilter;
+//! use mime_const::bytefilter::ByteFilter;
 //!
-//! const UPPER: BitFilter = BitFilter::from_str("A-Z");
+//! const UPPER: ByteFilter = ByteFilter::from_str("A-Z");
 //!
 //! fn main() {
 //!     assert!(UPPER.match_char('N'));
@@ -19,26 +19,19 @@ use std::error;
 use std::fmt;
 
 /// The bit filter
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BitFilter(pub u128);
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ByteFilter([bool; 256]);
 
-impl BitFilter {
-    /// Create a `BitFilter` from a range string.
+impl ByteFilter {
+    /// Create a `ByteFilter` from a range string.
     ///
     /// ```
-    /// use mime_const::bitfilter::{BitFilter, Error};
+    /// use mime_const::bytefilter::{ByteFilter, Error};
     ///
-    /// assert_eq!(
-    ///     Ok(BitFilter(1 << b'A')),
-    ///     BitFilter::try_from_bytes(b"A"),
-    /// );
-    /// assert_eq!(
-    ///     Err(Error::NonAscii { index: 0 }),
-    ///     BitFilter::try_from_bytes("é".as_bytes()),
-    /// );
+    /// assert!(ByteFilter::try_from_bytes(b"A").is_ok());
     /// assert_eq!(
     ///     Err(Error::InvalidRange { index: 1 }),
-    ///     BitFilter::try_from_bytes(b" z-a"),
+    ///     ByteFilter::try_from_bytes(b" z-a"),
     /// );
     /// ```
     ///
@@ -47,28 +40,21 @@ impl BitFilter {
     /// Returns [`Error`] for invalid range strings.
     #[expect(clippy::arithmetic_side_effects, reason = "checks first")]
     pub const fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let mut bits = 0u128;
+        let mut filter = [false; 256];
         if bytes.is_empty() {
-            return Ok(Self(bits));
+            return Ok(Self(filter));
         }
 
         // First byte; can be b'-'
         let mut i = 0;
-        if bytes[i] > 127 {
-            return Err(Error::NonAscii { index: i });
-        }
-        bits |= 1 << bytes[i];
+        filter[bytes[i] as usize] = true;
         i += 1;
 
         if i >= bytes.len() {
-            return Ok(Self(bits));
+            return Ok(Self(filter));
         }
         while i < bytes.len() - 1 {
             let b = bytes[i];
-            if b > 127 {
-                return Err(Error::NonAscii { index: i });
-            }
-
             if b == b'-' {
                 // Found range
                 if bytes[i - 1] > bytes[i + 1] {
@@ -77,31 +63,28 @@ impl BitFilter {
                 let mut b = bytes[i - 1] + 1; // Already added the start byte
                 while b < bytes[i + 1] {
                     // Will add the end byte next loop
-                    bits |= 1 << b;
+                    filter[b as usize] = true;
                     b += 1;
                 }
             } else {
-                bits |= 1 << b;
+                filter[b as usize] = true;
             }
 
             i += 1;
         }
 
         // Last byte; can be b'-'
-        if bytes[i] > 127 {
-            return Err(Error::NonAscii { index: i });
-        }
-        bits |= 1 << bytes[i];
+        filter[bytes[i] as usize] = true;
 
-        Ok(Self(bits))
+        Ok(Self(filter))
     }
 
-    /// Create a `BitFilter` from a range string, or panic.
+    /// Create a `ByteFilter` from a range string, or panic.
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// const UPPER: BitFilter = BitFilter::from_bytes(b"A-Z");
+    /// const UPPER: ByteFilter = ByteFilter::from_bytes(b"A-Z");
     ///
     /// fn main() {
     ///     assert!(UPPER.match_byte(b'N'));
@@ -112,7 +95,7 @@ impl BitFilter {
     ///
     /// # Panics
     ///
-    /// Panics if the bytes contains non-ASCII or an invalid range.
+    /// Panics if the bytes contain an invalid range.
     #[must_use]
     #[inline]
     pub const fn from_bytes(bytes: &[u8]) -> Self {
@@ -122,39 +105,32 @@ impl BitFilter {
         }
     }
 
-    /// Create a `BitFilter` from a range string.
+    /// Create a `ByteFilter` from a range string.
     ///
     /// ```
-    /// use mime_const::bitfilter::{BitFilter, Error};
+    /// use mime_const::bytefilter::{ByteFilter, Error};
     ///
-    /// assert_eq!(
-    ///     Ok(BitFilter(1 << b'A')),
-    ///     BitFilter::try_from_str("A"),
-    /// );
-    /// assert_eq!(
-    ///     Err(Error::NonAscii { index: 0 }),
-    ///     BitFilter::try_from_str("é"),
-    /// );
+    /// assert!(ByteFilter::try_from_str("A").is_ok());
     /// assert_eq!(
     ///     Err(Error::InvalidRange { index: 1 }),
-    ///     BitFilter::try_from_str(" z-a"),
+    ///     ByteFilter::try_from_str(" z-a"),
     /// );
     /// ```
     ///
     /// # Errors
     ///
-    /// Returns [`Error`] for invalid range strings or non-ASCII.
+    /// Returns [`Error`] for invalid range strings.
     #[inline]
     pub const fn try_from_str(chars: &str) -> Result<Self, Error> {
         Self::try_from_bytes(chars.as_bytes())
     }
 
-    /// Create a `BitFilter` from a range string, or panic.
+    /// Create a `ByteFilter` from a range string, or panic.
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// const UPPER: BitFilter = BitFilter::from_str("A-Z");
+    /// const UPPER: ByteFilter = ByteFilter::from_str("A-Z");
     ///
     /// fn main() {
     ///     assert!(UPPER.match_byte(b'N'));
@@ -165,22 +141,22 @@ impl BitFilter {
     ///
     /// # Panics
     ///
-    /// Panics if the string contains non-ASCII or an invalid range.
+    /// Panics if the string contains an invalid range.
     #[must_use]
     #[inline]
     pub const fn from_str(chars: &str) -> Self {
         Self::from_bytes(chars.as_bytes())
     }
 
-    /// Invert `BitFilter`.
+    /// Invert `ByteFilter`.
     ///
-    /// Note this still won’t match non-ASCII bytes. See
+    /// Note this still won’t match non-ASCII chars. See
     /// [`Self::match_or_non_ascii()`].
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// let upper = BitFilter::from_bytes(b"A-Z");
+    /// let upper = ByteFilter::from_bytes(b"A-Z");
     ///
     /// assert!(upper.match_char('N'));
     /// assert!(!upper.match_char('n'));
@@ -197,15 +173,21 @@ impl BitFilter {
     #[must_use]
     #[inline]
     pub const fn inverted(&self) -> Self {
-        Self(!self.0)
+        let mut filter = [false; 256];
+        let mut i = 0;
+        while i < 256 {
+            filter[i] = !self.0[i];
+            i += 1;
+        }
+        Self(filter)
     }
 
     /// Check if a byte matches the filter
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// let UPPER = BitFilter::from_bytes(b"A-Z");
+    /// let UPPER = ByteFilter::from_bytes(b"A-Z");
     /// assert!(UPPER.match_byte(b'N'));
     /// assert!(!UPPER.match_byte(b'n'));
     /// assert!(!UPPER.match_byte(b' '));
@@ -214,15 +196,15 @@ impl BitFilter {
     #[must_use]
     #[inline]
     pub const fn match_byte(self, b: u8) -> bool {
-        b <= 127 && self.0 & (1 << b) != 0
+        self.0[b as usize]
     }
 
     /// Check if a char matches the filter
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// let UPPER = BitFilter::from_bytes(b"A-Z");
+    /// let UPPER = ByteFilter::from_bytes(b"A-Z");
     /// assert!(UPPER.match_char('N'));
     /// assert!(!UPPER.match_char('n'));
     /// assert!(!UPPER.match_char(' '));
@@ -231,15 +213,15 @@ impl BitFilter {
     #[must_use]
     #[inline]
     pub const fn match_char(self, c: char) -> bool {
-        c <= 127 as char && self.match_byte(c as u8)
+        c <= 255 as char && self.match_byte(c as u8)
     }
 
     /// Check if a char matches the filter, or isn’t ASCII
     ///
     /// ```
-    /// use mime_const::bitfilter::BitFilter;
+    /// use mime_const::bytefilter::ByteFilter;
     ///
-    /// let UPPER = BitFilter::from_bytes(b"A-Z");
+    /// let UPPER = ByteFilter::from_bytes(b"A-Z");
     /// assert!(UPPER.match_or_non_ascii('N'));
     /// assert!(!UPPER.match_or_non_ascii('n'));
     /// assert!(!UPPER.match_or_non_ascii(' '));
@@ -248,18 +230,13 @@ impl BitFilter {
     #[must_use]
     #[inline]
     pub const fn match_or_non_ascii(self, c: char) -> bool {
-        c > 127 as char || self.match_byte(c as u8)
+        c > 255 as char || self.match_byte(c as u8)
     }
 }
 
 /// An error when creating a bit filter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
-    /// Found non-ASCII byte.
-    NonAscii {
-        /// The index of the invalid byte.
-        index: usize,
-    },
     /// Invalid range: start is greater than end
     InvalidRange {
         /// The index of the start of the invalid range.
@@ -270,9 +247,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NonAscii { index } => {
-                write!(f, "found non-ASCII byte at {index}")
-            }
             Self::InvalidRange { index } => {
                 write!(f, "found range with start greater than end at {index}")
             }
@@ -290,7 +264,6 @@ impl Error {
     /// Always.
     pub const fn panic(&self) -> ! {
         match self {
-            Self::NonAscii { .. } => panic!("found non-ASCII byte"),
             Self::InvalidRange { .. } => {
                 panic!("found range with start greater than end ")
             }

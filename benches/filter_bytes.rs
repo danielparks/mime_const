@@ -10,6 +10,7 @@ use criterion::{
     criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
 };
 use mime_const::bitfilter::BitFilter;
+use mime_const::bytefilter::ByteFilter;
 use std::hint::black_box;
 use std::time::Duration;
 
@@ -47,19 +48,26 @@ const fn match_byte(c: u8) -> bool {
     )
 }
 
-const FILTER: BitFilter = BitFilter::from_str("-!#$%&'+.^_`|~0-9a-zA-Z");
+const BIT_FILTER: BitFilter = BitFilter::from_str("-!#$%&'+.^_`|~0-9a-zA-Z");
+const BYTE_FILTER: ByteFilter = ByteFilter::from_str("-!#$%&'+.^_`|~0-9a-zA-Z");
 
 fn benchmarks(c: &mut Criterion) {
     for b in 0u8..=255 {
         assert_eq!(
             match_byte(b),
-            FILTER.match_byte(b),
+            BIT_FILTER.match_byte(b),
             "byte {:?} does not match",
             b as char
         );
         assert_eq!(
             match_byte(b),
             check_map(b),
+            "byte {:?} does not match",
+            b as char
+        );
+        assert_eq!(
+            match_byte(b),
+            BYTE_FILTER.match_byte(b),
             "byte {:?} does not match",
             b as char
         );
@@ -104,7 +112,18 @@ fn benchmarks(c: &mut Criterion) {
             |b, input| {
                 b.iter(|| {
                     for b in input.clone() {
-                        black_box(FILTER.match_byte(b));
+                        black_box(BIT_FILTER.match_byte(b));
+                    }
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("ByteFilter", format!("{input:?}")),
+            &input,
+            |b, input| {
+                b.iter(|| {
+                    for b in input.clone() {
+                        black_box(BYTE_FILTER.match_byte(b));
                     }
                 })
             },
