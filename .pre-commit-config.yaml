@@ -17,6 +17,7 @@ repos:
       - id: detect-private-key
       - id: mixed-line-ending
         args: ["--fix=no"]
+        exclude: "^target/"
       # - id: no-commit-to-branch
   - repo: local
     hooks:
