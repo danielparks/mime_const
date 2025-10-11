@@ -79,10 +79,14 @@ fn benchmarks(c: &mut Criterion) {
         .significance_level(0.01)
         .confidence_level(0.99)
         .sample_size(300)
-        .warm_up_time(Duration::from_millis(10))
-        .measurement_time(Duration::from_millis(100));
+        .warm_up_time(Duration::from_millis(100))
+        .measurement_time(Duration::from_millis(1000));
 
-    for input in [b'a'..=b'z', b' '..=(b' ' + b'z' - b'a')] {
+    for input in [
+        b'a'..=b'z',
+        b' '..=(b' ' + b'z' - b'a'),
+        b'Z'..=(b'Z' + b'z' - b'a'),
+    ] {
         group.throughput(Throughput::Bytes(input.len().try_into().unwrap()));
         group.bench_with_input(
             BenchmarkId::new("byte map", format!("{input:?}")),
@@ -124,6 +128,18 @@ fn benchmarks(c: &mut Criterion) {
                 b.iter(|| {
                     for b in input.clone() {
                         black_box(BYTE_FILTER.match_byte(b));
+                    }
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("ByteFilter.0", format!("{input:?}")),
+            &input,
+            |b, input| {
+                const FILTER: [bool; 256] = BYTE_FILTER.0;
+                b.iter(|| {
+                    for b in input.clone() {
+                        black_box(FILTER[b as usize]);
                     }
                 })
             },

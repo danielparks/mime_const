@@ -20,7 +20,7 @@ use std::fmt;
 
 /// The bit filter
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ByteFilter([bool; 256]);
+pub struct ByteFilter(pub [bool; 256]);
 
 impl ByteFilter {
     /// Create a `ByteFilter` from a range string.
