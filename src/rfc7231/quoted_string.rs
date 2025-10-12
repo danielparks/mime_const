@@ -95,6 +95,8 @@ pub(crate) const fn parse_quoted_string(
 
 /// Unquote a quoted string (without the quotes).
 ///
+/// This does not validate that the quoted string is otherwise valid.
+///
 /// In the [RFC7230 (HTTP) §3.2.6] definition of `quoted-string`:
 ///
 /// > The backslash octet ("\") can be used as a single-octet quoting
@@ -143,33 +145,64 @@ mod tests {
     use assert2::assert;
 
     #[test]
-    fn quoted_string_boring() {
+    fn unquote_string_boring() {
         assert!(unquote_string("") == "");
         assert!(unquote_string("abc") == "abc");
     }
 
     #[test]
-    fn quoted_string_backslash_n() {
+    fn unquote_string_backslash_n() {
         assert!(unquote_string(r"\n") == "n");
     }
 
     #[test]
-    fn quoted_string_backslash_quote() {
+    fn unquote_string_backslash_quote() {
         assert!(unquote_string(r#"a\"b"#) == r#"a"b"#);
     }
 
     #[test]
-    fn quoted_string_backslash_backslash() {
+    fn unquote_string_backslash_backslash() {
         assert!(unquote_string(r"a\\b") == r"a\b");
     }
 
     #[test]
-    fn quoted_string_complicated() {
+    fn unquote_string_complicated() {
         assert!(unquote_string(r#"\\\\\"a\\"#) == r#"\\"a\"#);
     }
 
     #[test]
-    fn quoted_string_unicode() {
+    fn unquote_string_unicode() {
         assert!(unquote_string(r"\🙂") == r"🙂");
+    }
+
+    #[test]
+    fn parse_quoted_string_boring() {
+        assert!(parse_quoted_string(br#""""#, 0) == Ok(2));
+        assert!(parse_quoted_string(br#""abc""#, 0) == Ok(5));
+    }
+
+    #[test]
+    fn parse_quoted_string_backslash_n() {
+        assert!(parse_quoted_string(br#""\n""#, 0) == Ok(4));
+    }
+
+    #[test]
+    fn parse_quoted_string_backslash_quote() {
+        assert!(parse_quoted_string(br#""a\"b""#, 0) == Ok(6));
+    }
+
+    #[test]
+    fn parse_quoted_string_backslash_backslash() {
+        assert!(parse_quoted_string(br#""a\\b""#, 0) == Ok(6));
+    }
+
+    #[test]
+    fn parse_quoted_string_complicated() {
+        assert!(parse_quoted_string(br#""\\\\\"a\\""#, 0) == Ok(11));
+    }
+
+    #[test]
+    fn parse_quoted_string_unicode() {
+        assert!(parse_quoted_string(r#""\🙂""#.as_bytes(), 0) == Ok(7));
     }
 }
