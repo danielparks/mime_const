@@ -4,9 +4,31 @@
 //!
 //! [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
 
+use crate::bytefilter::ByteFilter;
 use crate::const_utils::get_byte;
 use crate::rfc7231::{ParseError, Result};
 use std::borrow::Cow;
+
+/// `qdtext`
+///
+/// ```ABNF
+/// qdtext         = HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
+/// obs-text       = %x80-FF
+/// ```
+const QDTEXT_FILTER: ByteFilter = ByteFilter::from_bytes(b"\t \x21")
+    .with_inclusive_range(0x23..=0x5b)
+    .with_inclusive_range(0x5d..=0x7e)
+    .with_inclusive_range(0x80..=0xff);
+
+/// 2nd octet of `quoted-pair`
+///
+/// ```ABNF
+/// quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
+/// obs-text       = %x80-FF
+/// ```
+const QUOTED_PAIR_FILTER: ByteFilter = ByteFilter::from_bytes(b"\t ")
+    .with_inclusive_range(0x21..=0x7e)
+    .with_inclusive_range(0x80..=0xff);
 
 /// # Parse `quoted-string`.
 ///
@@ -65,13 +87,13 @@ pub(crate) const fn parse_quoted_string(
                 // Start of quoted-pair.
                 i += 1;
                 match get_byte(input, i) {
-                    // HTAB / SP / VCHAR / obs-text
-                    Some(b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) => (),
                     Some(c) => {
-                        return Err(ParseError::InvalidQuotedString {
-                            pos: i,
-                            byte: c,
-                        })
+                        if !QUOTED_PAIR_FILTER.match_byte(c) {
+                            return Err(ParseError::InvalidQuotedString {
+                                pos: i,
+                                byte: c,
+                            });
+                        }
                     }
                     None => {
                         return Err(ParseError::MissingParameterQuote {
@@ -80,12 +102,13 @@ pub(crate) const fn parse_quoted_string(
                     }
                 }
             }
-            // HTAB / SP /%x21 / %x23-5B / %x5D-7E / obs-text
-            Some(
-                b'\t' | b' ' | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff,
-            ) => (),
             Some(c) => {
-                return Err(ParseError::InvalidQuotedString { pos: i, byte: c })
+                if !QDTEXT_FILTER.match_byte(c) {
+                    return Err(ParseError::InvalidQuotedString {
+                        pos: i,
+                        byte: c,
+                    });
+                }
             }
             None => return Err(ParseError::MissingParameterQuote { pos: i }),
         }

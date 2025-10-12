@@ -17,6 +17,7 @@
 
 use std::error;
 use std::fmt;
+use std::ops::{Range, RangeInclusive};
 
 /// The bit filter
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,6 +147,71 @@ impl ByteFilter {
     #[inline]
     pub const fn from_str(chars: &str) -> Self {
         Self::from_bytes(chars.as_bytes())
+    }
+
+    /// Add a range of bytes to the filter.
+    ///
+    /// ```
+    /// use mime_const::bytefilter::ByteFilter;
+    ///
+    /// const ALPHA: ByteFilter = ByteFilter::from_bytes(b"A-Z")
+    ///     .with_range(b'a'..b'z');
+    ///
+    /// fn main() {
+    ///     assert!(ALPHA.match_byte(b'N'));
+    ///     assert!(ALPHA.match_byte(b'n'));
+    ///     assert!(!ALPHA.match_byte(b'z'));
+    ///     assert!(!ALPHA.match_byte(b' '));
+    /// }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bytes contain an invalid range.
+    #[must_use]
+    #[inline]
+    pub const fn with_range(mut self, range: Range<u8>) -> Self {
+        let mut i = range.start;
+        while i < range.end {
+            self.0[i as usize] = true;
+            i += 1;
+        }
+        self
+    }
+
+    /// Add a range of bytes to the filter.
+    ///
+    /// ```
+    /// use mime_const::bytefilter::ByteFilter;
+    ///
+    /// const ALPHA: ByteFilter = ByteFilter::from_bytes(b"A-Z")
+    ///     .with_inclusive_range(b'a'..=b'z');
+    ///
+    /// fn main() {
+    ///     assert!(ALPHA.match_byte(b'N'));
+    ///     assert!(ALPHA.match_byte(b'n'));
+    ///     assert!(ALPHA.match_byte(b'z'));
+    ///     assert!(!ALPHA.match_byte(b' '));
+    /// }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bytes contain an invalid range.
+    #[must_use]
+    #[inline]
+    pub const fn with_inclusive_range(
+        mut self,
+        range: RangeInclusive<u8>,
+    ) -> Self {
+        let mut i = *range.start();
+        self.0[i as usize] = true;
+        // Avoid u8::MAX + 1
+        while i < *range.end() {
+            i += 1;
+            self.0[i as usize] = true;
+        }
+        self
     }
 
     /// Invert `ByteFilter`.
