@@ -79,31 +79,31 @@ pub(crate) const fn parse_quoted_string(
     i += 1;
     loop {
         match get_byte(input, i) {
-            Some(b'"') => {
-                // End of the quoted-string.
-                return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
-            }
-            Some(b'\\') => {
-                // Start of quoted-pair.
-                i += 1;
-                match get_byte(input, i) {
-                    Some(c) => {
-                        if !QUOTED_PAIR_FILTER.match_byte(c) {
-                            return Err(ParseError::InvalidQuotedString {
+            Some(c) => {
+                if QDTEXT_FILTER.match_byte(c) {
+                    // Looks good; continue.
+                } else if c == b'"' {
+                    // End of the quoted-string.
+                    return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
+                } else if c == b'\\' {
+                    // Start of quoted-pair.
+                    i += 1;
+                    match get_byte(input, i) {
+                        Some(c) => {
+                            if !QUOTED_PAIR_FILTER.match_byte(c) {
+                                return Err(ParseError::InvalidQuotedString {
+                                    pos: i,
+                                    byte: c,
+                                });
+                            }
+                        }
+                        None => {
+                            return Err(ParseError::MissingParameterQuote {
                                 pos: i,
-                                byte: c,
-                            });
+                            })
                         }
                     }
-                    None => {
-                        return Err(ParseError::MissingParameterQuote {
-                            pos: i,
-                        })
-                    }
-                }
-            }
-            Some(c) => {
-                if !QDTEXT_FILTER.match_byte(c) {
+                } else {
                     return Err(ParseError::InvalidQuotedString {
                         pos: i,
                         byte: c,
