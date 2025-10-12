@@ -195,7 +195,7 @@ impl ByteFilter {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn match_byte(self, b: u8) -> bool {
+    pub const fn match_byte(&self, b: u8) -> bool {
         self.0[b as usize]
     }
 
@@ -212,7 +212,7 @@ impl ByteFilter {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn match_char(self, c: char) -> bool {
+    pub const fn match_char(&self, c: char) -> bool {
         c <= 255 as char && self.match_byte(c as u8)
     }
 
@@ -229,7 +229,7 @@ impl ByteFilter {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn match_or_non_ascii(self, c: char) -> bool {
+    pub const fn match_or_non_ascii(&self, c: char) -> bool {
         c > 255 as char || self.match_byte(c as u8)
     }
 }
