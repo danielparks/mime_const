@@ -45,7 +45,7 @@ impl BitFilter {
     /// # Errors
     ///
     /// Returns [`Error`] for invalid range strings.
-    #[expect(clippy::arithmetic_side_effects, reason = "checks first")]
+    #[allow(clippy::arithmetic_side_effects)] // we check first
     pub const fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let mut bits = 0u128;
         if bytes.is_empty() {
@@ -271,10 +271,14 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonAscii { index } => {
-                write!(f, "found non-ASCII byte at {index}")
+                write!(f, "found non-ASCII byte at {index}", index = index)
             }
             Self::InvalidRange { index } => {
-                write!(f, "found range with start greater than end at {index}")
+                write!(
+                    f,
+                    "found range with start greater than end at {index}",
+                    index = index
+                )
             }
         }
     }

@@ -38,7 +38,7 @@ impl ByteFilter {
     /// # Errors
     ///
     /// Returns [`Error`] for invalid range strings.
-    #[expect(clippy::arithmetic_side_effects, reason = "checks first")]
+    #[allow(clippy::arithmetic_side_effects)] // we check first
     pub const fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let mut filter = [false; 256];
         if bytes.is_empty() {
@@ -248,7 +248,11 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidRange { index } => {
-                write!(f, "found range with start greater than end at {index}")
+                write!(
+                    f,
+                    "found range with start greater than end at {index}",
+                    index = index
+                )
             }
         }
     }
