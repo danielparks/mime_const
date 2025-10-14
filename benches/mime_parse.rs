@@ -27,7 +27,12 @@ fn benchmarks(c: &mut Criterion) {
         .warm_up_time(Duration::from_millis(10))
         .measurement_time(Duration::from_millis(100));
 
-    for input in ["text/plain", "text/plain; charset=utf-8", "image/svg+xml"] {
+    for input in [
+        "text/plain",
+        "text/plain; charset=utf-8",
+        "image/svg+xml",
+        r#"text/plain; charset="utf\-8""#,
+    ] {
         group.throughput(Throughput::Bytes(input.len().try_into().unwrap()));
         group.bench_with_input(
             BenchmarkId::new("rough_parse", input),
