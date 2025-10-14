@@ -34,20 +34,24 @@ History
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,122 91,122 "/>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="92,568 928,568 "/>
-<text x="370" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+<text x="301" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
 #1
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="370,568 370,573 "/>
-<text x="649" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="301,568 301,573 "/>
+<text x="510" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
 #2
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="649,568 649,573 "/>
-<text x="928" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="510,568 510,573 "/>
+<text x="719" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
 #3
 </text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="719,568 719,573 "/>
+<text x="928" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+#4
+</text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="928,568 928,573 "/>
-<polyline fill="none" opacity="1" stroke="#1F78B4" stroke-width="1" points="92,294 370,363 649,329 928,283 "/>
-<polygon opacity="0.25" fill="#1F78B4" points="92,279 370,347 649,315 928,278 928,288 649,340 370,374 92,305 "/>
+<polyline fill="none" opacity="1" stroke="#1F78B4" stroke-width="1" points="92,294 301,363 510,329 719,283 928,314 "/>
+<polygon opacity="0.25" fill="#1F78B4" points="92,279 301,347 510,315 719,278 928,308 928,318 719,288 510,340 301,374 92,305 "/>
 <text x="809" y="73" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
 Point estimate
 </text>
