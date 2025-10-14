@@ -1,0 +1,55 @@
+<svg width="960" height="640" viewBox="0 0 960 640" xmlns="http://www.w3.org/2000/svg">
+<text x="480" y="37" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="16.129032258064516" opacity="1" fill="#000000">
+mime_parse/owned::Mime conversion/text/plain; charset=&quot;utf\-8&quot; History
+</text>
+<text x="32" y="313" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000" transform="rotate(270, 32, 313)">
+Average time (ns)
+</text>
+<text x="510" y="608" dy="-0.5ex" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+History
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="91,58 91,568 "/>
+<text x="82" y="528" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+300
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,528 91,528 "/>
+<text x="82" y="440" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+320
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,440 91,440 "/>
+<text x="82" y="353" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+340
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,353 91,353 "/>
+<text x="82" y="266" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+360
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,266 91,266 "/>
+<text x="82" y="179" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+380
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,179 91,179 "/>
+<text x="82" y="91" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+400
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="86,91 91,91 "/>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="92,568 928,568 "/>
+<text x="510" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+#0
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="510,568 510,573 "/>
+<text x="928" y="578" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+#1
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="928,568 928,573 "/>
+<polyline fill="none" opacity="1" stroke="#1F78B4" stroke-width="1" points="92,435 928,266 "/>
+<polygon opacity="0.25" fill="#1F78B4" points="92,429 928,218 928,306 92,440 "/>
+<text x="809" y="73" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+Point estimate
+</text>
+<text x="809" y="88" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="9.67741935483871" opacity="1" fill="#000000">
+Confidence interval
+</text>
+<polyline fill="none" opacity="1" stroke="#1F78B4" stroke-width="1" points="779,78 799,78 "/>
+<rect x="779" y="88" width="20" height="10" opacity="0.25" fill="#1F78B4" stroke="none"/>
+</svg>
