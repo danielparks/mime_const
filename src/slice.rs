@@ -1,6 +1,6 @@
 //! MIME/media type stored as slices.
 
-use crate::rfc7231::{is_valid_token_byte, is_valid_token_byte_not_plus};
+use crate::rfc7231::TOKEN_FILTER;
 use std::borrow::Cow;
 use std::fmt;
 use std::mem;
@@ -276,12 +276,10 @@ impl<'a> ConstMime<'a> {
             let mut i = 0;
             let plus = subtype.len() - suffix.len() - 1;
             while i < plus {
-                if !is_valid_token_byte_not_plus(subtype[i]) {
-                    if subtype[i] == b'+' {
-                        return Err(Error::SuffixNotAfterFirstPlus);
-                    } else {
-                        return Err(Error::InvalidSubtype);
-                    }
+                if subtype[i] == b'+' {
+                    return Err(Error::SuffixNotAfterFirstPlus);
+                } else if !TOKEN_FILTER.match_byte(subtype[i]) {
+                    return Err(Error::InvalidSubtype);
                 }
                 i += 1;
             }
@@ -296,7 +294,7 @@ impl<'a> ConstMime<'a> {
             while i < subtype.len() {
                 if subtype[i] != suffix[suffix_i] {
                     return Err(Error::SuffixNotEndOfSubtype);
-                } else if !is_valid_token_byte(subtype[i]) {
+                } else if !TOKEN_FILTER.match_byte(subtype[i]) {
                     return Err(Error::InvalidSuffix);
                 }
                 i += 1;
@@ -355,7 +353,7 @@ pub(crate) const fn validate_token(token: &str) -> bool {
     let mut i = 0;
     let bytes = token.as_bytes();
     while i < bytes.len() {
-        if !is_valid_token_byte(bytes[i]) {
+        if !TOKEN_FILTER.match_byte(bytes[i]) {
             return false;
         }
         i += 1;
@@ -369,7 +367,7 @@ pub(crate) const fn validate_token_no_plus(token: &str) -> bool {
     let mut i = 0;
     let bytes = token.as_bytes();
     while i < bytes.len() {
-        if !is_valid_token_byte_not_plus(bytes[i]) {
+        if bytes[i] == b'+' || !TOKEN_FILTER.match_byte(bytes[i]) {
             return false;
         }
         i += 1;

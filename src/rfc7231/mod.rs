@@ -83,6 +83,7 @@ mod tests_parse;
 pub use errors::*;
 pub use quoted_string::*;
 
+use crate::bytefilter::ByteFilter;
 use crate::const_utils::get_byte;
 use std::borrow::Cow;
 
@@ -209,7 +210,7 @@ impl Parser {
                 // Everything range with or without parameters.
                 (3, 1, None)
             }
-            [c, ..] if is_valid_token_byte(*c) => {
+            [c, ..] if TOKEN_FILTER.match_byte(*c) => {
                 let slash = try_!(self.consume_type(bytes));
                 let (i, plus) = try_!(self.consume_subtype(bytes, slash));
                 (i, slash, plus)
@@ -262,7 +263,7 @@ impl Parser {
                     }
                 };
             }
-            Some(c) if is_valid_token_byte(c) => (),
+            Some(c) if TOKEN_FILTER.match_byte(c) => (),
             Some(c) => {
                 return Err(ParseError::InvalidToken { pos: i, byte: c })
             }
@@ -277,7 +278,7 @@ impl Parser {
                 Some(b'+') if matches!(plus, None) => {
                     plus = Some(i);
                 }
-                Some(c) if is_valid_token_byte(c) => (),
+                Some(c) if TOKEN_FILTER.match_byte(c) => (),
                 Some(c) => {
                     return Err(ParseError::InvalidToken { pos: i, byte: c })
                 }
@@ -393,26 +394,8 @@ const fn parse_parameter_key_value(
 /// We make an exception for `'*'`. FIXME?
 ///
 /// [RFC7231]: https://datatracker.ietf.org/doc/html/rfc7231#section-3.1.1.1
-#[inline]
-pub(crate) const fn is_valid_token_byte(c: u8) -> bool {
-    matches!(
-        c,
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'+' | b'-' | b'.' | b'^' |
-        b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
-    )
-}
-
-/// Is the passed byte valid in a token and not `b'+'`?
-///
-/// See [`is_valid_token_byte()`].
-#[inline]
-pub(crate) const fn is_valid_token_byte_not_plus(c: u8) -> bool {
-    matches!(
-        c,
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'-' | b'.' | b'^' |
-        b'_' | b'`' | b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z',
-    )
-}
+pub const TOKEN_FILTER: ByteFilter =
+    ByteFilter::from_bytes(b"-!#$%&'+.^_`|~0-9a-zA-Z");
 
 /// Consume valid token bytes and return first non-token byte.
 ///
@@ -420,7 +403,7 @@ pub(crate) const fn is_valid_token_byte_not_plus(c: u8) -> bool {
 /// otherwise returns the index (and content) of the first non-token byte.
 const fn consume_token(input: &[u8], mut i: usize) -> Option<(usize, u8)> {
     while i < input.len() {
-        if !is_valid_token_byte(input[i]) {
+        if !TOKEN_FILTER.match_byte(input[i]) {
             return Some((i, input[i]));
         }
         i += 1;
