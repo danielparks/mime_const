@@ -4,11 +4,12 @@ macro_rules! impl_mime {
     ($t:ty, $max:expr) => {
         use crate::rfc7231::{
             parse_parameter, unquote_string, ConstMime, ConstParameter,
-            ConstParameters, Parser, Result,
+            ConstParameters, ParseError, Parser, Result,
         };
         use std::borrow::Cow;
         use std::cmp::Ordering;
         use std::fmt;
+        use std::ops::Range;
 
         #[derive(Clone, Debug, Eq)]
         pub struct Mime<'a> {
@@ -170,6 +171,72 @@ macro_rules! impl_mime {
                     Parameters::Many => usize::MAX,
                 }
             }
+
+            /// Update the type with a different subtype.
+            pub fn with_subtype(mut self, subtype: &str) -> Result<Self> {
+                self.set_subtype(subtype)?;
+                Ok(self)
+            }
+
+            /// Change the subtype.
+            pub fn set_subtype(&mut self, subtype: &str) -> Result<()> {
+                // Validate subtype
+                let bytes = subtype.as_bytes();
+                let (end, plus) =
+                    Parser::type_parser().consume_subtype(bytes, 0)?;
+                if end < bytes.len() {
+                    return Err(ParseError::InvalidToken {
+                        pos: end,
+                        byte: bytes[end],
+                    });
+                }
+
+                // self.end must be at least this, so this won’t overflow:
+                let start = self.slash + 1;
+                let difference: isize = isize::try_from(subtype.len()).unwrap()
+                    - isize::try_from(self.end - start).unwrap();
+                self.source
+                    .set_range(usize::from(start)..self.end.into(), subtype);
+                self.end = Self::add(self.end, difference)?;
+
+                // Update suffix
+                // plus (if Some) is always < end, so this won’t overflow:
+                self.plus =
+                    plus.map(|plus| <$t>::try_from(plus).unwrap() + start);
+
+                // Update parameters
+                match self.parameters {
+                    Parameters::One(ref mut one) => {
+                        one.shift(difference)?;
+                    }
+                    Parameters::Two(ref mut one, ref mut two) => {
+                        one.shift(difference)?;
+                        two.shift(difference)?;
+                    }
+                    Parameters::None | Parameters::Many => {}
+                }
+                Ok(())
+            }
+
+            /// Add `base` to `difference` as best we can.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError::TooLong`] on overflow or underflow.
+            fn add(base: $t, difference: isize) -> Result<$t> {
+                if difference < 0 {
+                    (-difference)
+                        .try_into()
+                        .ok()
+                        .and_then(|difference| base.checked_sub(difference))
+                } else {
+                    difference
+                        .try_into()
+                        .ok()
+                        .and_then(|difference| base.checked_add(difference))
+                }
+                .ok_or(ParseError::TooLong)
+            }
         }
 
         impl fmt::Display for Mime<'_> {
@@ -266,6 +333,26 @@ macro_rules! impl_mime {
                     Self::Str(src) => src,
                     Self::Owned(src) => src.as_str(),
                 }
+            }
+
+            /// Ensure this source is `Source::Owned` and get the value.
+            fn owned(&mut self) -> &mut String {
+                if let Self::Str(str) = *self {
+                    *self = Self::Owned(str.to_owned());
+                }
+
+                if let Self::Owned(string) = self {
+                    string
+                } else {
+                    unreachable!();
+                }
+            }
+
+            /// Set a slice of the source to a value
+            ///
+            /// Will convert the source to `Source::Owned` if it isn’t already.
+            fn set_range(&mut self, range: Range<usize>, value: &str) {
+                self.owned().replace_range(range, value);
             }
         }
 
@@ -372,6 +459,18 @@ macro_rules! impl_mime {
             fn end(&self) -> usize {
                 self.end.into()
             }
+
+            /// Shift the indices in this parameter by `difference`.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError::TooLong`] on overflow or underflow.
+            fn shift(&mut self, difference: isize) -> Result<()> {
+                self.start = Mime::add(self.start, difference)?;
+                self.equal = Mime::add(self.equal, difference)?;
+                self.end = Mime::add(self.end, difference)?;
+                Ok(())
+            }
         }
 
         /// Iterator over parameters.
@@ -420,7 +519,7 @@ macro_rules! impl_mime {
         #[cfg(test)]
         mod test {
             use super::*;
-            use assert2::assert;
+            use assert2::{assert, check};
             use itertools::Itertools;
 
             #[test]
@@ -567,6 +666,43 @@ macro_rules! impl_mime {
                     assert!(expected == stringify(&permution));
                 }
             }
+
+            #[test]
+            fn update_subtype() {
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b").with_subtype("foobar")
+                        == Mime::try_constant("a/foobar; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b").with_subtype("b")
+                        == Mime::try_constant("a/b; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b").with_subtype("c+d+e")
+                        == Mime::try_constant("a/c+d+e; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b")
+                        .with_subtype("c+d+e")
+                        == Mime::try_constant("a/c+d+e; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b")
+                        .with_subtype("c+d+e")
+                        .unwrap()
+                        .suffix()
+                        == Some("d+e")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b; k3=c")
+                        .with_subtype("b")
+                        == Mime::try_constant("a/b; k1=a; k2=b; k3=c")
+                );
+                check!(
+                    Mime::constant("a/b; k=v").with_subtype("*")
+                        == Err(ParseError::InvalidToken { pos: 0, byte: b'*' })
+                );
+            }
         }
     };
 }
@@ -586,4 +722,31 @@ pub mod index_u16 {
 #[allow(clippy::unnecessary_cast)] // usize as usize
 pub mod index_usize {
     impl_mime!(usize, usize::MAX);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::rfc7231::ParseError;
+    use assert2::check;
+
+    #[test]
+    fn long_subtype() {
+        check!(
+            index_u8::Mime::constant("a/b; k=v")
+                .with_subtype(&"X".repeat(248))
+                .unwrap()
+                .parameters()
+                .count()
+                == 1
+        );
+
+        for i in 249..260 {
+            check!(
+                index_u8::Mime::constant("a/b; k=v")
+                    .with_subtype(&"X".repeat(i))
+                    == Err(ParseError::TooLong)
+            );
+        }
+    }
 }
