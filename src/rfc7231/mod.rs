@@ -200,7 +200,7 @@ impl Parser {
         }
 
         // Check the first bytes.
-        let (i, slash, plus) = match bytes {
+        let (end, slash, plus) = match bytes {
             [] | [b'/', ..] => {
                 return Err(ParseError::MissingType);
             }
@@ -212,15 +212,13 @@ impl Parser {
             }
             [c, ..] if TOKEN_FILTER.match_byte(*c) => {
                 let slash = try_!(self.consume_type(bytes));
-                let (i, plus) = try_!(self.consume_subtype(bytes, slash));
+                let (i, plus) = try_!(self.consume_subtype(bytes, slash + 1));
                 (i, slash, plus)
             }
             [c, ..] => {
                 return Err(ParseError::InvalidToken { pos: 0, byte: *c });
             }
         };
-
-        let end = i;
 
         let parameters = try_!(parse_parameters(bytes, end));
         Ok(ConstMime { source, slash, plus, end, parameters })
@@ -237,13 +235,13 @@ impl Parser {
     }
 
     /// Validate the subtype and return the index after the last character.
-    const fn consume_subtype(
+    pub(crate) const fn consume_subtype(
         &self,
         bytes: &[u8],
         start: usize,
     ) -> Result<(usize, Option<usize>)> {
         // Validate first byte of subtype token.
-        let mut i = start + 1;
+        let mut i = start;
         let mut plus = None;
         match get_byte(bytes, i) {
             None | Some(b';' | b' ' | b'\t') => {
