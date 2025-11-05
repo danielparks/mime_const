@@ -208,16 +208,7 @@ macro_rules! impl_mime {
                 self.end = Self::add(self.end, difference)?;
 
                 // Update parameters
-                match self.parameters {
-                    Parameters::One(ref mut one) => {
-                        one.shift(difference)?;
-                    }
-                    Parameters::Two(ref mut one, ref mut two) => {
-                        one.shift(difference)?;
-                        two.shift(difference)?;
-                    }
-                    Parameters::None | Parameters::Many => {}
-                }
+                self.parameters.shift(difference)?;
                 Ok(())
             }
 
@@ -241,16 +232,7 @@ macro_rules! impl_mime {
                     plus.map(|plus| <$t>::try_from(plus).unwrap() + start);
 
                 // Update parameters
-                match self.parameters {
-                    Parameters::One(ref mut one) => {
-                        one.shift(difference)?;
-                    }
-                    Parameters::Two(ref mut one, ref mut two) => {
-                        one.shift(difference)?;
-                        two.shift(difference)?;
-                    }
-                    Parameters::None | Parameters::Many => {}
-                }
+                self.parameters.shift(difference)?;
                 Ok(())
             }
 
@@ -483,6 +465,25 @@ macro_rules! impl_mime {
                     ),
                     ConstParameters::Many => Self::Many,
                 }
+            }
+
+            /// Shift the indices in all parameters by `difference`.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError::TooLong`] on overflow or underflow.
+            fn shift(&mut self, difference: isize) -> Result<()> {
+                match self {
+                    Self::One(one) => {
+                        one.shift(difference)?;
+                    }
+                    Self::Two(one, two) => {
+                        one.shift(difference)?;
+                        two.shift(difference)?;
+                    }
+                    Self::None | Self::Many => {}
+                }
+                Ok(())
             }
         }
 
