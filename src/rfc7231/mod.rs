@@ -338,6 +338,51 @@ pub(crate) const fn parse_parameter(
     }
 }
 
+/// Parse a parameter value out of `bytes` starting at `start`.
+///
+/// Returns `(end, quoted)` where `end` is the index just past the last byte of
+/// the value, and `quoted` indicates whether the value was a quoted string.
+///
+/// The value can be either:
+///   - A quoted string (starts with `"`)
+///   - An unquoted token value
+///
+/// # Errors
+///
+/// Returns [`ParseError`] for invalid values.
+pub(crate) const fn parse_parameter_value(
+    bytes: &[u8],
+    start: usize,
+) -> Result<(usize, bool)> {
+    match consume_token(bytes, start) {
+        Some((i, b'"')) if i == start => {
+            // Quoted string value
+            let end = try_!(parse_quoted_string(bytes, i));
+            Ok((end, true))
+        }
+        Some((i, b';' | b' ' | b'\t')) => {
+            // Unquoted token value ending with separator or whitespace
+            if i == start {
+                Err(ParseError::MissingParameterValue { pos: i })
+            } else {
+                Ok((i, false))
+            }
+        }
+        Some((i, c)) => {
+            // Invalid character in parameter value
+            Err(ParseError::InvalidParameter { pos: i, byte: c })
+        }
+        None => {
+            // Unquoted token value at end of input
+            if start >= bytes.len() {
+                Err(ParseError::MissingParameterValue { pos: start })
+            } else {
+                Ok((bytes.len(), false))
+            }
+        }
+    }
+}
+
 /// Parse a parameter key=value out of `bytes` starting at `start`.
 const fn parse_parameter_key_value(
     bytes: &[u8],
@@ -351,31 +396,8 @@ const fn parse_parameter_key_value(
             Err(ParseError::InvalidParameter { pos: i, byte: c })
         }
         Some((equal, b'=')) => {
-            let end = match consume_token(bytes, equal + 1) {
-                Some((i, b'"')) if i == equal + 1 => {
-                    let end = try_!(parse_quoted_string(bytes, i));
-                    return Ok(Some(ConstParameter {
-                        start,
-                        equal,
-                        end,
-                        quoted: true,
-                    }));
-                }
-                Some((i, b';' | b' ' | b'\t')) => i,
-                Some((i, c)) => {
-                    return Err(ParseError::InvalidParameter {
-                        pos: i,
-                        byte: c,
-                    })
-                }
-                None => bytes.len(),
-            };
-
-            if end <= equal + 1 {
-                Err(ParseError::MissingParameterValue { pos: end })
-            } else {
-                Ok(Some(ConstParameter { start, equal, end, quoted: false }))
-            }
+            let (end, quoted) = try_!(parse_parameter_value(bytes, equal + 1));
+            Ok(Some(ConstParameter { start, equal, end, quoted }))
         }
         Some((i, c)) => Err(ParseError::InvalidParameter { pos: i, byte: c }),
         None => Err(ParseError::MissingParameterEqual { pos: start }),

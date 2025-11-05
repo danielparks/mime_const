@@ -84,7 +84,8 @@ pub(crate) const fn parse_quoted_string(
                     // Looks good; continue.
                 } else if c == b'"' {
                     // End of the quoted-string.
-                    return Ok(i + 1); // input[i] existed, so i + 1 <= input.len()
+                    // input[i] existed, so i + 1 <= input.len()
+                    return Ok(i + 1);
                 } else if c == b'\\' {
                     // Start of quoted-pair.
                     i += 1;
@@ -114,6 +115,98 @@ pub(crate) const fn parse_quoted_string(
         }
         i += 1;
     }
+}
+
+/// Quote a string for use as a parameter value if necessary.
+///
+/// Returns the input string if it contains only token characters, otherwise
+/// returns a quoted and escaped version.
+///
+/// # Valid Characters
+///
+/// Input must contain only characters valid in quoted strings (per [RFC7230
+/// (HTTP) §3.2.6] `quoted-pair`):
+///   - `'\t'`
+///   - `' '`
+///   - `'!'..='~'` (printable ASCII characters)
+///   - `\x80`..`\xFF` (high bit characters)
+///
+/// Other characters, e.g. '\n' and '\r', will cause this function to return
+/// `Err(ParseError::InvalidQuotedString { .. })`.
+///
+/// # Examples
+///
+/// ```
+/// use mime_const::rfc7231::quote_string;
+/// use std::borrow::Cow;
+///
+/// assert_eq!(quote_string("utf-8").unwrap(), Cow::Borrowed("utf-8"));
+/// assert_eq!(
+///     quote_string("hello world"),
+///     Ok(Cow::Borrowed("\"hello world\"")),
+/// );
+/// assert_eq!(
+///     quote_string(r#"say "hi""#),
+///     Ok(Cow::Borrowed(r#""say \"hi\"""#)),
+/// );
+///
+/// // Invalid: control characters
+/// assert!(quote_string("hello\nworld").is_err());
+/// ```
+///
+/// # Errors
+///
+/// Returns [`ParseError::InvalidQuotedString`] if the input contains control
+/// characters other than tab.
+///
+/// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
+pub fn quote_string(input: &str) -> Result<Cow<'_, str>> {
+    use crate::rfc7231::TOKEN_FILTER;
+
+    // Single pass: validate and check what we need to do
+    let mut needs_quoting = input.is_empty();
+    let mut needs_escaping = false;
+
+    for (i, &byte) in input.as_bytes().iter().enumerate() {
+        // Validate: byte must be in QUOTED_PAIR_FILTER
+        if !QUOTED_PAIR_FILTER.match_byte(byte) {
+            return Err(ParseError::InvalidQuotedString { pos: i, byte });
+        }
+
+        // Check if quoting is needed (non-token characters)
+        if !TOKEN_FILTER.match_byte(byte) {
+            needs_quoting = true;
+        }
+
+        // Check if escaping is needed (quotes or backslashes)
+        if byte == b'"' || byte == b'\\' {
+            needs_escaping = true;
+        }
+    }
+
+    // No quoting needed - return as-is
+    if !needs_quoting {
+        return Ok(Cow::Borrowed(input));
+    }
+
+    // Quoting needed but no escaping - just wrap in quotes
+    if !needs_escaping {
+        return Ok(Cow::Owned(format!("\"{}\"", input)));
+    }
+
+    // Need to escape quotes and backslashes
+    let mut output = String::with_capacity(input.len() + 10);
+    output.push('"');
+
+    for ch in input.chars() {
+        if ch == '"' || ch == '\\' {
+            output.push('\\');
+        }
+        output.push(ch);
+    }
+
+    output.push('"');
+    Ok(Cow::Owned(output))
 }
 
 /// Unquote a quoted string (without the quotes).
@@ -165,7 +258,189 @@ pub fn unquote_string(input: &str) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert2::assert;
+    use crate::rfc7231::parse_parameter_value;
+    use assert2::{assert, let_assert};
+
+    #[test]
+    fn quote_string_no_quoting_needed() {
+        // Simple tokens don't need quoting
+        assert!(quote_string("utf-8") == Ok(Cow::Borrowed("utf-8")));
+        assert!(quote_string("text") == Ok(Cow::Borrowed("text")));
+        assert!(quote_string("abc123") == Ok(Cow::Borrowed("abc123")));
+        assert!(quote_string("foo-bar") == Ok(Cow::Borrowed("foo-bar")));
+        assert!(quote_string("a.b.c") == Ok(Cow::Borrowed("a.b.c")));
+    }
+
+    #[test]
+    fn quote_string_empty() {
+        // Empty string needs quoting
+        assert!(quote_string("") == Ok(Cow::Owned("\"\"".to_string())));
+    }
+
+    #[test]
+    fn quote_string_with_spaces() {
+        assert!(
+            quote_string("hello world")
+                == Ok(Cow::Owned("\"hello world\"".to_string()))
+        );
+        assert!(quote_string(" ") == Ok(Cow::Owned("\" \"".to_string())));
+        assert!(
+            quote_string("a b c") == Ok(Cow::Owned("\"a b c\"".to_string()))
+        );
+    }
+
+    #[test]
+    fn quote_string_with_special_chars() {
+        assert!(quote_string("a;b") == Ok(Cow::Owned("\"a;b\"".to_string())));
+        assert!(quote_string("a=b") == Ok(Cow::Owned("\"a=b\"".to_string())));
+        assert!(quote_string("a,b") == Ok(Cow::Owned("\"a,b\"".to_string())));
+        assert!(quote_string("a/b") == Ok(Cow::Owned("\"a/b\"".to_string())));
+    }
+
+    #[test]
+    fn quote_string_with_quotes() {
+        assert!(
+            quote_string(r#"say "hi""#)
+                == Ok(Cow::Owned(r#""say \"hi\"""#.to_string()))
+        );
+        assert!(quote_string(r#"""#) == Ok(Cow::Owned(r#""\"""#.to_string())));
+        assert!(
+            quote_string(r#"a"b"c"#)
+                == Ok(Cow::Owned(r#""a\"b\"c""#.to_string()))
+        );
+    }
+
+    #[test]
+    fn quote_string_with_backslashes() {
+        assert!(
+            quote_string(r"a\b") == Ok(Cow::Owned(r#""a\\b""#.to_string()))
+        );
+        assert!(quote_string(r"\") == Ok(Cow::Owned(r#""\\""#.to_string())));
+        assert!(quote_string(r"\\") == Ok(Cow::Owned(r#""\\\\""#.to_string())));
+    }
+
+    #[test]
+    fn quote_string_with_both() {
+        assert!(
+            quote_string(r#"a\"b"#) == Ok(Cow::Owned(r#""a\\"b""#.to_string()))
+        );
+        assert!(
+            quote_string(r#"\""#) == Ok(Cow::Owned(r#""\\\"""#.to_string()))
+        );
+    }
+
+    #[test]
+    fn quote_string_unicode() {
+        // Unicode is allowed in quoted strings
+        assert!(quote_string("🙂") == Ok(Cow::Owned("\"🙂\"".to_string())));
+        assert!(
+            quote_string("hello 🙂")
+                == Ok(Cow::Owned("\"hello 🙂\"".to_string()))
+        );
+    }
+
+    /// Quote a string, validate it, and check that it unquotes correctly.
+    fn quote_validate_and_unquote(input: &str) {
+        let quoted = quote_string(input).unwrap();
+
+        let_assert!(
+            Ok((end, is_quoted)) = parse_parameter_value(quoted.as_bytes(), 0),
+            "Invalid quoted string ({:?}) for input {:?}",
+            quoted,
+            input,
+        );
+        assert!(
+            end == quoted.len(),
+            "Invalid quoted string ({:?}) for input {:?}",
+            quoted,
+            input,
+        );
+
+        // Verify round-trip
+        if is_quoted {
+            // Remove quotes and unescape
+            let unquoted = unquote_string(&quoted[1..quoted.len() - 1]);
+            assert!(
+                unquoted == input,
+                "Unquoted value doesn't match input (quoted={:?})",
+                quoted,
+            );
+        } else {
+            // Should be unchanged
+            assert!(quoted == input, "Unquoted value doesn't match input");
+        }
+    }
+
+    #[test]
+    fn quote_string_validates_and_roundtrips() {
+        for input in [
+            "utf-8",
+            "hello world",
+            r#"say "hi""#,
+            r"a\b",
+            r#"a\"b"#,
+            "",
+            "🙂",
+            "a;b",
+            "a=b",
+            "a,b",
+            "a/b",
+            "a b c",
+            r"\\",
+            r#"""#,
+            "a\tb",
+        ] {
+            quote_validate_and_unquote(input);
+        }
+    }
+
+    #[test]
+    fn quote_string_1024_chars_after_space() {
+        let end = char::from_u32(b' ' as u32 + 1024).unwrap();
+        for c in ' '..end {
+            if c != '\x7f' {
+                // Only invalid char in this range
+                quote_validate_and_unquote(&c.to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn quote_string_all_ascii_bytes() {
+        // Bytes 128 and above are invalid in UTF-8.
+        for byte in 0u8..128 {
+            let input = &[byte][..];
+            let input = str::from_utf8(input).expect("valid utf-8");
+
+            // Valid b'\t', 0x20-0x7E (printable ASCII), 0x80-0xFF (obs-text)
+            let is_valid =
+                byte == b'\t' || (0x20..=0x7E).contains(&byte) || byte >= 0x80;
+
+            if is_valid {
+                // Should succeed
+                let_assert!(
+                    Ok(quoted) = quote_string(input),
+                    "Expected quote_string() to succeed for valid byte {:?}",
+                    byte as char,
+                );
+
+                assert!(
+                    parse_parameter_value(quoted.as_bytes(), 0)
+                        == Ok((quoted.len(), quoted.starts_with('"'))),
+                    "Invalid quoted string ({:?}) for valid byte {:?}",
+                    quoted,
+                    byte,
+                );
+            } else {
+                // Should fail (control characters other than tab)
+                assert!(
+                    let Err(_) = quote_string(input),
+                    "Expected quote_string() to reject invalid byte {:02x}",
+                    byte,
+                );
+            }
+        }
+    }
 
     #[test]
     fn unquote_string_boring() {
