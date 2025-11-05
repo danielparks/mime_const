@@ -322,7 +322,8 @@ mod tests {
     #[test]
     fn quote_string_with_both() {
         assert!(
-            quote_string(r#"a\"b"#) == Ok(Cow::Owned(r#""a\\"b""#.to_string()))
+            quote_string(r#"a\"b"#)
+                == Ok(Cow::Owned(r#""a\\\"b""#.to_string()))
         );
         assert!(
             quote_string(r#"\""#) == Ok(Cow::Owned(r#""\\\"""#.to_string()))
