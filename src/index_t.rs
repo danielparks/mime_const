@@ -180,21 +180,14 @@ macro_rules! impl_mime {
 
             /// Change the subtype.
             pub fn set_subtype(&mut self, subtype: &str) -> Result<()> {
-                // Validate subtype
-                let bytes = subtype.as_bytes();
-                let (end, plus) =
-                    Parser::type_parser().consume_subtype(bytes, 0)?;
-                if end < bytes.len() {
-                    return Err(ParseError::InvalidToken {
-                        pos: end,
-                        byte: bytes[end],
-                    });
-                }
+                let plus = Self::validate_subtype(subtype)?;
 
-                // self.end must be at least this, so this won’t overflow:
+                // self.slash < self.end, so this won’t overflow:
                 let start = self.slash + 1;
-                let difference: isize = isize::try_from(subtype.len()).unwrap()
-                    - isize::try_from(self.end - start).unwrap();
+                let difference =
+                    Self::usize_sub(subtype.len(), self.end - start)?;
+
+                // Update source
                 self.source
                     .set_range(usize::from(start)..self.end.into(), subtype);
                 self.end = Self::add(self.end, difference)?;
@@ -218,6 +211,23 @@ macro_rules! impl_mime {
                 Ok(())
             }
 
+            /// Validate subtype.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError`] for invalid subtypes, including if the
+            /// subtype ends before the end of the string.
+            fn validate_subtype(subtype: &str) -> Result<Option<usize>> {
+                let bytes = subtype.as_bytes();
+                let (end, plus) =
+                    Parser::type_parser().consume_subtype(bytes, 0)?;
+                if end == bytes.len() {
+                    Ok(plus)
+                } else {
+                    Err(ParseError::InvalidToken { pos: end, byte: bytes[end] })
+                }
+            }
+
             /// Add `base` to `difference` as best we can.
             ///
             /// # Errors
@@ -236,6 +246,24 @@ macro_rules! impl_mime {
                         .and_then(|difference| base.checked_add(difference))
                 }
                 .ok_or(ParseError::TooLong)
+            }
+
+            /// Calculate `a - b` as best we can.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError::TooLong`] on overflow or underflow.
+            fn usize_sub<A: Into<usize>, B: Into<usize>>(
+                a: A,
+                b: B,
+            ) -> Result<isize> {
+                let a = a.into();
+                let b = b.into();
+                if a > b {
+                    (a - b).try_into().map_err(|_| ParseError::TooLong)
+                } else {
+                    Ok(-(b - a).try_into().map_err(|_| ParseError::TooLong)?)
+                }
             }
         }
 
