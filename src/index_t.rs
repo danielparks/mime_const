@@ -172,10 +172,53 @@ macro_rules! impl_mime {
                 }
             }
 
+            /// Update the type with a different type.
+            pub fn with_type(mut self, type_: &str) -> Result<Self> {
+                self.set_type(type_)?;
+                Ok(self)
+            }
+
             /// Update the type with a different subtype.
             pub fn with_subtype(mut self, subtype: &str) -> Result<Self> {
                 self.set_subtype(subtype)?;
                 Ok(self)
+            }
+
+            /// Change the type.
+            pub fn set_type(&mut self, type_: &str) -> Result<()> {
+                Self::validate_type(type_)?;
+
+                // Current type goes from 0 to slash
+                let old_type_len: usize = self.slash.into();
+                let difference = Self::usize_sub(type_.len(), old_type_len)?;
+
+                // Update source (replace from 0..slash with new type)
+                self.source.set_range(0..old_type_len, type_);
+
+                // Update slash position
+                self.slash = <$t>::try_from(type_.len())
+                    .map_err(|_| ParseError::TooLong)?;
+
+                // Update plus (suffix position, if present)
+                if let Some(plus) = self.plus {
+                    self.plus = Some(Self::add(plus, difference)?);
+                }
+
+                // Update end position
+                self.end = Self::add(self.end, difference)?;
+
+                // Update parameters
+                match self.parameters {
+                    Parameters::One(ref mut one) => {
+                        one.shift(difference)?;
+                    }
+                    Parameters::Two(ref mut one, ref mut two) => {
+                        one.shift(difference)?;
+                        two.shift(difference)?;
+                    }
+                    Parameters::None | Parameters::Many => {}
+                }
+                Ok(())
             }
 
             /// Change the subtype.
@@ -208,6 +251,32 @@ macro_rules! impl_mime {
                     }
                     Parameters::None | Parameters::Many => {}
                 }
+                Ok(())
+            }
+
+            /// Validate type.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError`] for invalid types, including if the
+            /// type ends before the end of the string.
+            fn validate_type(type_: &str) -> Result<()> {
+                use crate::rfc7231::TOKEN_FILTER;
+
+                let bytes = type_.as_bytes();
+
+                // Type must not be empty
+                if bytes.is_empty() {
+                    return Err(ParseError::MissingType);
+                }
+
+                // Validate all bytes are valid token characters
+                for (i, &byte) in bytes.iter().enumerate() {
+                    if !TOKEN_FILTER.match_byte(byte) {
+                        return Err(ParseError::InvalidToken { pos: i, byte });
+                    }
+                }
+
                 Ok(())
             }
 
@@ -696,6 +765,46 @@ macro_rules! impl_mime {
             }
 
             #[test]
+            fn update_type() {
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b").with_type("foo")
+                        == Mime::try_constant("foo/b; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("application/json; k=v").with_type("a")
+                        == Mime::try_constant("a/json; k=v")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b").with_type("text")
+                        == Mime::try_constant("text/foo+bar; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("application/svg+xml")
+                        .with_type("image")
+                        .unwrap()
+                        .suffix()
+                        == Some("xml")
+                );
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b; k3=c").with_type("text")
+                        == Mime::try_constant("text/b; k1=a; k2=b; k3=c")
+                );
+            }
+
+            #[test]
+            fn update_type_error() {
+                check!(
+                    Mime::constant("a/b; k=v").with_type("*")
+                        == Err(ParseError::InvalidToken { pos: 0, byte: b'*' })
+                );
+                check!(Mime::constant("a/b").with_type("text/html").is_err());
+                check!(
+                    Mime::constant("application/json; k=v").with_type("")
+                        == Err(ParseError::MissingType)
+                );
+            }
+
+            #[test]
             fn update_subtype() {
                 check!(
                     Mime::constant("a/b; k1=a; k2=b").with_subtype("foobar")
@@ -726,9 +835,17 @@ macro_rules! impl_mime {
                         .with_subtype("b")
                         == Mime::try_constant("a/b; k1=a; k2=b; k3=c")
                 );
+            }
+
+            #[test]
+            fn update_subtype_error() {
                 check!(
                     Mime::constant("a/b; k=v").with_subtype("*")
                         == Err(ParseError::InvalidToken { pos: 0, byte: b'*' })
+                );
+                check!(
+                    Mime::constant("a/b; k=v").with_subtype("")
+                        == Err(ParseError::MissingSubtype)
                 );
             }
         }
@@ -773,6 +890,29 @@ mod test {
             check!(
                 index_u8::Mime::constant("a/b; k=v")
                     .with_subtype(&"X".repeat(i))
+                    == Err(ParseError::TooLong)
+            );
+        }
+    }
+
+    #[test]
+    fn long_type() {
+        // "a/b; k=v" is 8 chars total, type is 1 char
+        // Changing type to 248 chars would make total 255 chars (248 + 1 + 1 + 5)
+        // This should work since u8::MAX is 255
+        check!(
+            index_u8::Mime::constant("a/b; k=v")
+                .with_type(&"X".repeat(248))
+                .unwrap()
+                .parameters()
+                .count()
+                == 1
+        );
+
+        // Anything longer should overflow
+        for i in 249..260 {
+            check!(
+                index_u8::Mime::constant("a/b; k=v").with_type(&"X".repeat(i))
                     == Err(ParseError::TooLong)
             );
         }
