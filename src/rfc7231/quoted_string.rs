@@ -163,12 +163,10 @@ pub(crate) const fn parse_quoted_string(
 pub fn quote_string(input: &str) -> Result<Cow<'_, str>> {
     use crate::rfc7231::TOKEN_FILTER;
 
-    // Single pass: validate and check what we need to do
     let mut needs_quoting = input.is_empty();
-    let mut needs_escaping = false;
+    let mut needs_escaping = 0usize;
 
     for (i, &byte) in input.as_bytes().iter().enumerate() {
-        // Validate: byte must be in QUOTED_PAIR_FILTER
         if !QUOTED_PAIR_FILTER.match_byte(byte) {
             return Err(ParseError::InvalidQuotedString { pos: i, byte });
         }
@@ -178,26 +176,24 @@ pub fn quote_string(input: &str) -> Result<Cow<'_, str>> {
             needs_quoting = true;
         }
 
-        // Check if escaping is needed (quotes or backslashes)
+        // Count characters that need escaping.
         if byte == b'"' || byte == b'\\' {
-            needs_escaping = true;
+            needs_escaping += 1;
         }
     }
 
-    // No quoting needed - return as-is
     if !needs_quoting {
         return Ok(Cow::Borrowed(input));
     }
 
-    // Quoting needed but no escaping - just wrap in quotes
-    if !needs_escaping {
+    if needs_escaping == 0 {
         return Ok(Cow::Owned(format!("\"{}\"", input)));
     }
 
-    // Need to escape quotes and backslashes
-    let mut output = String::with_capacity(input.len() + 10);
+    let mut output = String::with_capacity(input.len() + needs_escaping + 2);
     output.push('"');
 
+    // FIXME find the bytes (maybe record them above) and work in slices.
     for ch in input.chars() {
         if ch == '"' || ch == '\\' {
             output.push('\\');
