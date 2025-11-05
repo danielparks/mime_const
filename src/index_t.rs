@@ -236,6 +236,71 @@ macro_rules! impl_mime {
                 Ok(())
             }
 
+            /// Update the type with a different suffix.
+            pub fn with_suffix(mut self, suffix: Option<&str>) -> Result<Self> {
+                self.set_suffix(suffix)?;
+                Ok(self)
+            }
+
+            /// Change the suffix.
+            ///
+            /// Pass `Some(suffix)` to add or change the suffix, or `None` to
+            /// remove it.
+            pub fn set_suffix(&mut self, suffix: Option<&str>) -> Result<()> {
+                // Validate the suffix if provided
+                if let Some(suffix) = suffix {
+                    Self::validate_suffix(suffix)?;
+                }
+
+                // Calculate old suffix length (including the '+')
+                let old_len = if let Some(plus) = self.plus {
+                    // Current suffix is from plus to end
+                    usize::from(self.end) - usize::from(plus)
+                } else {
+                    0
+                };
+
+                // Calculate new suffix length (including the '+')
+                let new_len = suffix.map_or(0, |s| s.len() + 1);
+
+                let difference = Self::usize_sub(new_len, old_len)?;
+
+                // Determine where to make the change
+                let change_start = usize::from(self.plus.unwrap_or(self.end));
+
+                // Update source
+                if let Some(suffix) = suffix {
+                    // Add or replace suffix with "+suffix"
+                    self.source.set_range(
+                        change_start..self.end.into(),
+                        &format!("+{}", suffix),
+                    );
+                } else {
+                    // Remove suffix (from plus to end)
+                    if self.plus.is_some() {
+                        self.source
+                            .set_range(change_start..self.end.into(), "");
+                    }
+                }
+
+                // Update plus position
+                self.plus = if suffix.is_some() {
+                    Some(
+                        <$t>::try_from(change_start)
+                            .map_err(|_| ParseError::TooLong)?,
+                    )
+                } else {
+                    None
+                };
+
+                // Update end position
+                self.end = Self::add(self.end, difference)?;
+
+                // Update parameters
+                self.parameters.shift(difference)?;
+                Ok(())
+            }
+
             /// Validate type.
             ///
             /// # Errors
@@ -277,6 +342,31 @@ macro_rules! impl_mime {
                 } else {
                     Err(ParseError::InvalidToken { pos: end, byte: bytes[end] })
                 }
+            }
+
+            /// Validate suffix.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ParseError`] for invalid suffixes. Note that this
+            /// returns `ParseError::MissingSubtype` if `Some("")` is passed.
+            fn validate_suffix(suffix: &str) -> Result<()> {
+                use crate::rfc7231::TOKEN_FILTER;
+
+                let bytes = suffix.as_bytes();
+
+                if bytes.is_empty() {
+                    return Err(ParseError::MissingSubtype); // FIXME?
+                }
+
+                // Validate all bytes are valid token characters
+                for (i, &byte) in bytes.iter().enumerate() {
+                    if !TOKEN_FILTER.match_byte(byte) {
+                        return Err(ParseError::InvalidToken { pos: i, byte });
+                    }
+                }
+
+                Ok(())
             }
 
             /// Add `base` to `difference` as best we can.
@@ -847,6 +937,79 @@ macro_rules! impl_mime {
                 check!(
                     Mime::constant("a/b; k=v").with_subtype("")
                         == Err(ParseError::MissingSubtype)
+                );
+            }
+
+            #[test]
+            fn update_suffix() {
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b").with_suffix(Some("xml"))
+                        == Mime::try_constant("a/b+xml; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b")
+                        .with_suffix(Some("xml"))
+                        == Mime::try_constant("a/foo+xml; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b")
+                        .with_suffix(Some("foobar"))
+                        == Mime::try_constant("a/foo+foobar; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/a+bc+def; k=v").with_suffix(Some("+++"))
+                        == Mime::try_constant("a/a++++; k=v")
+                );
+                check!(
+                    Mime::constant("a/a++++; k=v").with_suffix(Some("bc+def"))
+                        == Mime::try_constant("a/a+bc+def; k=v")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b")
+                        .with_suffix(Some("a"))
+                        == Mime::try_constant("a/foo+a; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("a/foo+bar; k1=a; k2=b").with_suffix(None)
+                        == Mime::try_constant("a/foo; k1=a; k2=b")
+                );
+                check!(
+                    Mime::constant("application/svg")
+                        .with_suffix(Some("xml"))
+                        .unwrap()
+                        .suffix()
+                        == Some("xml")
+                );
+                check!(
+                    Mime::constant("application/svg+xml")
+                        .with_suffix(None)
+                        .unwrap()
+                        .suffix()
+                        == None
+                );
+                check!(
+                    Mime::constant("a/b; k1=a; k2=b; k3=c")
+                        .with_suffix(Some("json"))
+                        == Mime::try_constant("a/b+json; k1=a; k2=b; k3=c")
+                );
+                check!(
+                    Mime::constant("a/b")
+                        .with_suffix(Some("xml"))
+                        .unwrap()
+                        .subtype()
+                        == "b+xml"
+                );
+            }
+
+            #[test]
+            fn update_suffix_error() {
+                check!(
+                    Mime::constant("a/b; k=v").with_suffix(Some(""))
+                        == Err(ParseError::MissingSubtype)
+                );
+                check!(
+                    Mime::constant("a/b; k=v").with_suffix(Some("/"))
+                        == Err(ParseError::InvalidToken { pos: 0, byte: b'/' })
                 );
             }
         }
