@@ -5,17 +5,29 @@ use std::fmt;
 /// An error encountered while parsing a media type.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParseError {
+    /// Missing type before the slash (/)
     MissingType,
+    /// A slash (/) was missing between the type and subtype
     MissingSlash,
+    /// Missing subtype after the slash (/)
     MissingSubtype,
+    /// Missing parameter after the semicolon (;)
     MissingParameter { pos: usize },
+    /// An equals sign (=) was missing between a parameter and its value
     MissingParameterEqual { pos: usize },
+    /// A value was missing in a parameter
     MissingParameterValue { pos: usize },
+    /// A quote (") was missing from a parameter value
     MissingParameterQuote { pos: usize },
+    /// Invalid token
     InvalidToken { pos: usize, byte: u8 },
+    /// Invalid parameter
     InvalidParameter { pos: usize, byte: u8 },
+    /// Invalid quoted-string in parameter value
     InvalidQuotedString { pos: usize, byte: u8 },
+    /// There is trailing whitespace at the end
     TrailingWhitespace,
+    /// The string is too long
     TooLong,
 }
 
