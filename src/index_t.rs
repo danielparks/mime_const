@@ -3,8 +3,8 @@
 macro_rules! impl_mime {
     ($t:ty, $max:expr) => {
         use crate::rfc7231::{
-            parse_parameter, unquote_string, ConstMime, ConstParameter,
-            ConstParameters, ParseError, Parser, Result,
+            parse_parameter, quote_string, unquote_string, ConstMime,
+            ConstParameter, ConstParameters, ParseError, Parser, Result,
         };
         use std::borrow::Cow;
         use std::cmp::Ordering;
@@ -412,7 +412,13 @@ macro_rules! impl_mime {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{}/{}", self.type_(), self.subtype())?;
                 for (key, value) in self.parameters() {
-                    write!(f, "; {}={}", key, value)?;
+                    write!(
+                        f,
+                        "; {}={}",
+                        key,
+                        quote_string(&value)
+                            .expect("parameter value must be valid")
+                    )?;
                 }
                 Ok(())
             }
