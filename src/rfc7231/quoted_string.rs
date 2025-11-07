@@ -6,7 +6,7 @@
 
 use crate::bytefilter::ByteFilter;
 use crate::const_utils::get_byte;
-use crate::rfc7231::{ParseError, Result};
+use crate::rfc7231::{ParseError, Result, TOKEN_FILTER};
 use std::borrow::Cow;
 
 /// `qdtext`
@@ -161,8 +161,6 @@ pub(crate) const fn parse_quoted_string(
 ///
 /// [RFC7230 (HTTP) §3.2.6]: https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6
 pub fn quote_string(input: &str) -> Result<Cow<'_, str>> {
-    use crate::rfc7231::TOKEN_FILTER;
-
     let mut needs_quoting = input.is_empty();
     let mut needs_escaping = 0usize;
 

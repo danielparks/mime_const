@@ -5,6 +5,7 @@ macro_rules! impl_mime {
         use crate::rfc7231::{
             parse_parameter, quote_string, unquote_string, ConstMime,
             ConstParameter, ConstParameters, ParseError, Parser, Result,
+            TOKEN_FILTER,
         };
         use std::borrow::Cow;
         use std::cmp::Ordering;
@@ -308,8 +309,6 @@ macro_rules! impl_mime {
             /// Returns [`ParseError`] for invalid types, including if the
             /// type ends before the end of the string.
             fn validate_type(type_: &str) -> Result<()> {
-                use crate::rfc7231::TOKEN_FILTER;
-
                 let bytes = type_.as_bytes();
 
                 // Type must not be empty
@@ -351,8 +350,6 @@ macro_rules! impl_mime {
             /// Returns [`ParseError`] for invalid suffixes. Note that this
             /// returns `ParseError::MissingSubtype` if `Some("")` is passed.
             fn validate_suffix(suffix: &str) -> Result<()> {
-                use crate::rfc7231::TOKEN_FILTER;
-
                 let bytes = suffix.as_bytes();
 
                 if bytes.is_empty() {
