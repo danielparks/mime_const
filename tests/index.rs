@@ -135,8 +135,8 @@ fn sort_mime() {
     }
 
     let expected = stringify(source);
-    for mut permution in source.iter().permutations(expected.len()) {
-        permution.sort();
-        assert!(expected == stringify(&permution));
+    for mut permutation in source.iter().permutations(expected.len()) {
+        permutation.sort();
+        assert!(expected == stringify(&permutation));
     }
 }
