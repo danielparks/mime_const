@@ -7,72 +7,77 @@ on:
       - main
   pull_request:
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CLICOLOR: 1
 
+# These would more naturally be separate jobs, but GitHub actions “bills” each
+# job separately and rounds up to the next minute, so four 10 second jobs “cost”
+# my account 4 action minutes.
 jobs:
-  clippy:
-    name: cargo clippy
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write # SARIF reporting for zizmor
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
       - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
         with:
-          components: clippy
-      - run: cargo clippy --all-features --all-targets
-      - name: check doc lints
-        env:
-          RUSTDOCFLAGS: --document-private-items -Dwarnings
-        run: cargo doc --no-deps --all-features
+          toolchain: stable
+          components: clippy, rustfmt
 
-  deny:
-    name: cargo deny
-    runs-on: ubuntu-latest
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
+        with:
+          tool: cargo-msrv
+
+      - uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
+        if: ${{ !cancelled() }}
+
+      - uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+        if: ${{ !cancelled() }}
+        with:
+          persona: pedantic
+
+      - uses: actions-rust-lang/rustfmt@4066006ec54a31931b9b1fddfd38f2fdf2d27143 # v1.1.2
+        if: ${{ !cancelled() }}
+
       - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
+        if: ${{ !cancelled() }}
         with:
           rust-version: "1.85.0"
 
-  fmt:
-    name: cargo fmt
-    runs-on: ubuntu-latest
+      - name: cargo clippy
+        if: ${{ !cancelled() }}
+        run: cargo +stable clippy --all-features --all-targets
 
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
-        with:
-          components: rustfmt
-      - uses: actions-rust-lang/rustfmt@4066006ec54a31931b9b1fddfd38f2fdf2d27143 # v1.1.2
+      - name: cargo doc lints
+        if: ${{ !cancelled() }}
+        env:
+          RUSTDOCFLAGS: --document-private-items -Dwarnings
+        run: cargo +stable doc --no-deps --all-features
 
-  msrv:
-    name: cargo msrv
-    runs-on: ubuntu-latest
+      - name: cargo msrv
+        if: ${{ !cancelled() }}
+        run: cargo msrv verify --ignore-lockfile
 
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: taiki-e/install-action@cde8c9e634f4a17bc06b61413ac0ef75450eac46 # v2.81.4
-        with:
-          tool: cargo-msrv
-      - run: cargo msrv verify --ignore-lockfile
+      - name: cargo build --tests --all-features
+        id: cargo_build
+        if: ${{ !cancelled() }}
+        run: cargo +stable build --tests --all-features
 
-  test:
-    name: cargo test
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
-      - run: cargo build --tests --all-features
-      - run: cargo test --all-features
-
-  typos:
-    name: typos
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
+      - name: cargo test --all-features
+        if: ${{ !cancelled() && steps.cargo_build.outcome == 'success' }}
+        run: cargo +stable test --all-features

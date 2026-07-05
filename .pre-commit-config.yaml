@@ -20,11 +20,18 @@ repos:
         exclude: "target/"
       - id: no-commit-to-branch
   - repo: https://github.com/crate-ci/typos
-    rev: v1.47.2
+    rev: v1.48.0
     hooks:
       - id: typos
         args: []
         exclude: "target/|reference/media-types"
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.26.1
+    hooks:
+      - id: zizmor
+        args:
+          - "--no-progress" # https://github.com/zizmorcore/zizmor/issues/582
+          - "--persona=pedantic"
   - repo: local
     hooks:
       - id: cargo clippy
